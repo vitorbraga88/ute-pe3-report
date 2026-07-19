@@ -4,7 +4,9 @@
 window.UTE_PE3 = window.UTE_PE3 || {};
 
 UTE_PE3.state = {
+  os_numbers: [],
   tecnicos: [],
+  supervisores: [],
   autocompleteCache: {
     local: [],
     tecnico: [],
@@ -21,6 +23,10 @@ UTE_PE3.App = {
     this.initVoiceSupport();
     this.loadDrafts();
     this.monitorConnectivity();
+
+    // Default supervisor
+    UTE_PE3.state.supervisores = ['Vitor Braga'];
+    this.renderSupervisores();
 
     // Init signature canvas
     setTimeout(() => UTE_PE3.Signature.init('signature-canvas'), 100);
@@ -116,14 +122,77 @@ UTE_PE3.App = {
     `).join('');
   },
 
+  // ─── OS (múltiplas, sem autocomplete/localStorage) ────
+
+  addOS() {
+    const input = document.getElementById('os_number');
+    const num = input.value.trim();
+    if (!/^\d{6}$/.test(num)) {
+      UTE_PE3.Validation.showError('os_number', 'Exatamente 6 dígitos numéricos');
+      return;
+    }
+
+    if (!UTE_PE3.state.os_numbers.includes(num)) {
+      UTE_PE3.state.os_numbers.push(num);
+    }
+    input.value = '';
+    UTE_PE3.Validation.clearError('os_number');
+    this.renderOS();
+  },
+
+  removeOS(index) {
+    UTE_PE3.state.os_numbers.splice(index, 1);
+    this.renderOS();
+  },
+
+  renderOS() {
+    const list = document.getElementById('os-list');
+    if (!list) return;
+
+    list.innerHTML = UTE_PE3.state.os_numbers.map((n, i) => `
+      <span class="tag">${this.escHtml(n)} <span class="remove-tag" onclick="UTE_PE3.App.removeOS(${i})">&times;</span></span>
+    `).join('');
+  },
+
+  // ─── Supervisor(es) (múltiplos, com autocomplete/localStorage) ────
+
+  addSupervisor() {
+    const input = document.getElementById('supervisor');
+    const name = input.value.trim();
+    if (!name) return;
+
+    if (!UTE_PE3.state.supervisores.includes(name)) {
+      UTE_PE3.state.supervisores.push(name);
+      this.addToAutocomplete('supervisor', name);
+    }
+    input.value = '';
+    UTE_PE3.Validation.clearError('supervisor');
+    document.getElementById('autocomplete-supervisor').classList.remove('open');
+    this.renderSupervisores();
+  },
+
+  removeSupervisor(index) {
+    UTE_PE3.state.supervisores.splice(index, 1);
+    this.renderSupervisores();
+  },
+
+  renderSupervisores() {
+    const list = document.getElementById('supervisores-list');
+    if (!list) return;
+
+    list.innerHTML = UTE_PE3.state.supervisores.map((s, i) => `
+      <span class="tag">${this.escHtml(s)} <span class="remove-tag" onclick="UTE_PE3.App.removeSupervisor(${i})">&times;</span></span>
+    `).join('');
+  },
+
   // ─── Masks ──────────────────────────────
 
   setDefaultDate() {
     const now = new Date();
-    const dd = String(now.getDate()).padStart(2, '0');
+    const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const aaaa = now.getFullYear();
-    document.getElementById('data').value = `${dd}/${mm}/${aaaa}`;
+    const dd = String(now.getDate()).padStart(2, '0');
+    document.getElementById('data').value = `${yyyy}-${mm}-${dd}`;
   },
 
   setupMasks() {
@@ -131,6 +200,9 @@ UTE_PE3.App = {
     document.getElementById('os_number').addEventListener('input', (e) => {
       e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
       UTE_PE3.Validation.clearError('os_number');
+    });
+    document.getElementById('os_number').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); this.addOS(); }
     });
 
     // PTS — auto-append -YY on blur (not input) to avoid double-append
@@ -146,25 +218,10 @@ UTE_PE3.App = {
       }
     });
 
-    // Date mask dd/mm/aaaa
-    document.getElementById('data').addEventListener('input', (e) => {
-      let v = e.target.value.replace(/\D/g, '').slice(0, 8);
-      if (v.length >= 5) v = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4);
-      else if (v.length >= 3) v = v.slice(0, 2) + '/' + v.slice(2);
-      e.target.value = v;
-      UTE_PE3.Validation.clearError('data');
-    });
-
-    // Time mask HH:MM:SS
-    const timeMask = (e) => {
-      let v = e.target.value.replace(/[^\d:]/g, '');
-      // Auto-insert colons
-      v = v.replace(/(\d{2})(\d{2})(\d{2})/, '$1:$2:$3')
-           .replace(/(\d{2})(\d{2})/, '$1:$2');
-      e.target.value = v.slice(0, 8);
-    };
-    document.getElementById('hora_inicial').addEventListener('input', timeMask);
-    document.getElementById('hora_final').addEventListener('input', timeMask);
+    // Data/Hora — inputs nativos type=date/time cuidam do formato; só limpar erro
+    document.getElementById('data').addEventListener('input', () => UTE_PE3.Validation.clearError('data'));
+    document.getElementById('hora_inicial').addEventListener('input', () => UTE_PE3.Validation.clearError('hora_inicial'));
+    document.getElementById('hora_final').addEventListener('input', () => UTE_PE3.Validation.clearError('hora_final'));
 
     // Close autocomplete on outside click
     document.addEventListener('click', (e) => {
@@ -176,6 +233,11 @@ UTE_PE3.App = {
     // Enter key on tecnico input → add
     document.getElementById('tecnico').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); this.addTecnico(); }
+    });
+
+    // Enter key on supervisor input → add
+    document.getElementById('supervisor').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); this.addSupervisor(); }
     });
   },
 
@@ -287,7 +349,7 @@ UTE_PE3.App = {
   // ─── Populate Form ────────────────────────
 
   populateForm(data) {
-    const fields = ['os_number', 'pts', 'descricao', 'local', 'status', 'supervisor',
+    const fields = ['pts', 'descricao', 'local', 'status',
                     'data', 'hora_inicial', 'hora_final', 'horimetro',
                     'descricao_detalhada', 'observacoes'];
     fields.forEach((f) => {
@@ -295,9 +357,17 @@ UTE_PE3.App = {
       if (el && data[f] !== undefined) el.value = data[f] || '';
     });
 
+    // OS múltiplas
+    UTE_PE3.state.os_numbers = data.os_numbers || (data.os_number ? [data.os_number] : []);
+    this.renderOS();
+
     // Técnicos
     UTE_PE3.state.tecnicos = data.tecnicos || [];
     this.renderTecnicos();
+
+    // Supervisor(es)
+    UTE_PE3.state.supervisores = data.supervisores || (data.supervisor ? [data.supervisor] : []);
+    this.renderSupervisores();
 
     // Photos
     UTE_PE3.Camera.photos = data.fotos || [];
@@ -334,7 +404,15 @@ UTE_PE3.App = {
     btn.innerHTML = '<span class="spinner"></span> Gerando relatório...';
 
     try {
-      // Try to send to n8n webhook
+      // Gerar PDF real (blob base64) via jsPDF + html2canvas
+      btn.innerHTML = '<span class="spinner"></span> Gerando PDF...';
+      const filename = `OS_${(data.os_numbers || []).join('-') || 'sem-numero'}_${(data.data || '').replace(/-/g, '')}.pdf`;
+      const pdfBase64 = await UTE_PE3.Report.generatePDFBlob(data);
+      data.pdf_base64 = pdfBase64;
+      data.pdf_filename = filename;
+
+      // Try to send to n8n webhook (inclui o PDF)
+      btn.innerHTML = '<span class="spinner"></span> Enviando...';
       const sent = await this.sendToWebhook(data);
 
       // Update status
@@ -349,12 +427,12 @@ UTE_PE3.App = {
         UTE_PE3.UI.toast('Salvo offline — será enviado quando houver conexão', 'info');
       }
 
-      // Generate PDF report (opens print dialog)
-      UTE_PE3.Report.generate(data);
+      // Download local do PDF gerado
+      if (pdfBase64) UTE_PE3.Report.downloadBase64(pdfBase64, filename);
 
       // Save autocomplete values
       this.addToAutocomplete('local', data.local);
-      this.addToAutocomplete('supervisor', data.supervisor);
+      (data.supervisores || []).forEach((s) => this.addToAutocomplete('supervisor', s));
 
       // Save to localStorage autocomplete
       this.saveAutocompleteCache();
@@ -370,13 +448,13 @@ UTE_PE3.App = {
 
   collectFormData() {
     return {
-      os_number: document.getElementById('os_number').value.trim(),
+      os_numbers: [...UTE_PE3.state.os_numbers],
       pts: document.getElementById('pts').value.trim(),
       descricao: document.getElementById('descricao').value.trim(),
       local: document.getElementById('local').value.trim(),
       status: document.getElementById('status').value,
       tecnicos: [...UTE_PE3.state.tecnicos],
-      supervisor: document.getElementById('supervisor').value.trim(),
+      supervisores: [...UTE_PE3.state.supervisores],
       data: document.getElementById('data').value.trim(),
       hora_inicial: document.getElementById('hora_inicial').value.trim(),
       hora_final: document.getElementById('hora_final').value.trim(),
@@ -394,16 +472,14 @@ UTE_PE3.App = {
   async sendToWebhook(data) {
     const webhookUrl = 'https://servidor-203.tail43f430.ts.net/webhook/ute-pe3-os';
 
-    // Strip base64 images for the webhook payload (they're large)
-    // The n8n workflow will generate the PDF server-side
     const payload = {
-      os_number: data.os_number,
+      os_numbers: data.os_numbers,
       pts: data.pts,
       descricao: data.descricao,
       local: data.local,
       status: 'Finalizado',
       tecnicos: data.tecnicos,
-      supervisor: data.supervisor,
+      supervisores: data.supervisores,
       data: data.data,
       hora_inicial: data.hora_inicial,
       hora_final: data.hora_final,
@@ -412,7 +488,9 @@ UTE_PE3.App = {
       observacoes: data.observacoes,
       assinatura: data.assinatura,
       fotos: data.fotos,
-      foto_pts: data.foto_pts
+      foto_pts: data.foto_pts,
+      pdf_base64: data.pdf_base64 || null,
+      pdf_filename: data.pdf_filename || null
     };
 
     try {
@@ -420,7 +498,7 @@ UTE_PE3.App = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(15000)
+        signal: AbortSignal.timeout(30000)
       });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -430,6 +508,7 @@ UTE_PE3.App = {
       return false;
     }
   },
+
 
   // ─── Connectivity ─────────────────────────
 

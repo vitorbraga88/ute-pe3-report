@@ -8,17 +8,21 @@ Sistema de gestão de Ordens de Serviço (OS) e Permissões de Trabalho (PTS) �
 - **Telegram Bot:** @report_B_bot
 
 ## Funcionalidades
-- Formulário OS/PTS completo (16 campos)
+- Formulário OS/PTS completo (OS e Supervisor com múltiplos valores via tags)
+- Data (calendário nativo) e Hora Inicial/Final (HH:mm nativo)
 - Assinatura digital na tela (touch)
 - Entrada por voz (Web Speech API, pt-BR)
 - Relatório fotográfico com compressão automática
-- Geração de PDF automática
-- Integração n8n → OpenRouter (resumo IA) → SQLite (via save-server) + Telegram (3 chats)
+- Geração de PDF real no cliente (jsPDF + html2canvas), com download local imediato
+- Integração n8n → OpenRouter (resumo IA) → SQLite (via save-server) + Telegram (PDF + texto, 3 chats)
+- PDF salvo no servidor em `relatorios/` e servido publicamente
+- Bot Telegram com `/relatorios` (últimos 5 PDFs) e atalho "Nova OS"
+- Favicon próprio de relatório, logo UTE PE3 só no cabeçalho/PDF
 - PWA instalável no celular (iOS e Android)
 - Modo offline com IndexedDB
 
 ## Stack
-HTML5 · CSS · Vanilla JS · SQLite · n8n · Telegram Bot API
+HTML5 · CSS · Vanilla JS · jsPDF · html2canvas · SQLite · n8n · Telegram Bot API
 
 ## Deploy
 ```bash

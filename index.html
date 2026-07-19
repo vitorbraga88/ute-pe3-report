@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#1e40af">
   <meta name="description" content="Sistema de Gestao de Ordens de Servico e PTS - UTE Pernambuco III">
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="assets/logo-ute.png" type="image/png">
+  <link rel="icon" href="assets/icons/favicon.ico" type="image/x-icon">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <title>UTE-PE3 — OS/PTS</title>
   <link rel="stylesheet" href="css/styles.css">
@@ -32,11 +32,15 @@
       <div class="card">
         <div class="card-title"><span class="icon">📋</span> Identificação</div>
 
-        <!-- 1 — Número da OS -->
+        <!-- 1 — Número(s) da OS -->
         <div class="form-group">
-          <label for="os_number">Número da OS <span class="required">*</span></label>
-          <input type="text" id="os_number" name="os_number" inputmode="numeric" maxlength="6"
-                 placeholder="202607" autocomplete="off">
+          <label for="os_number">Número(s) da OS <span class="required">*</span></label>
+          <div class="tag-list" id="os-list"></div>
+          <div class="input-group">
+            <input type="text" id="os_number" inputmode="numeric" maxlength="6"
+                   placeholder="202607" autocomplete="off">
+            <button type="button" class="btn btn-primary btn-sm" onclick="UTE_PE3.App.addOS()">+</button>
+          </div>
           <div class="error-msg" id="error-os_number"></div>
         </div>
 
@@ -98,14 +102,18 @@
           <div class="error-msg" id="error-tecnico"></div>
         </div>
 
-        <!-- 7 — Supervisor -->
+        <!-- 7 — Supervisor(es) -->
         <div class="form-group">
-          <label for="supervisor">Supervisor <span class="required">*</span></label>
-          <div class="autocomplete-wrapper">
-            <input type="text" id="supervisor" name="supervisor" value="Vitor Braga"
-                   autocomplete="off" oninput="UTE_PE3.App.onAutocompleteInput('supervisor')"
-                   onfocus="UTE_PE3.App.onAutocompleteInput('supervisor')">
-            <div class="autocomplete-list" id="autocomplete-supervisor"></div>
+          <label for="supervisor">Supervisor(es) <span class="required">*</span></label>
+          <div class="tag-list" id="supervisores-list"></div>
+          <div class="input-group">
+            <div class="autocomplete-wrapper" style="flex:1">
+              <input type="text" id="supervisor" placeholder="Nome do supervisor"
+                     autocomplete="off" oninput="UTE_PE3.App.onAutocompleteInput('supervisor')"
+                     onfocus="UTE_PE3.App.onAutocompleteInput('supervisor')">
+              <div class="autocomplete-list" id="autocomplete-supervisor"></div>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="UTE_PE3.App.addSupervisor()">+</button>
           </div>
           <div class="error-msg" id="error-supervisor"></div>
         </div>
@@ -118,8 +126,7 @@
         <!-- 8 — Data -->
         <div class="form-group">
           <label for="data">Data <span class="required">*</span></label>
-          <input type="text" id="data" name="data" placeholder="dd/mm/aaaa"
-                 maxlength="10" autocomplete="off">
+          <input type="date" id="data" name="data" autocomplete="off">
           <div class="error-msg" id="error-data"></div>
         </div>
 
@@ -127,16 +134,14 @@
           <!-- 9 — Hora Inicial -->
           <div class="form-group">
             <label for="hora_inicial">Hora Inicial <span class="required">*</span></label>
-            <input type="text" id="hora_inicial" name="hora_inicial" placeholder="HH:MM:SS"
-                   maxlength="8" autocomplete="off">
+            <input type="time" id="hora_inicial" name="hora_inicial" autocomplete="off">
             <div class="error-msg" id="error-hora_inicial"></div>
           </div>
 
           <!-- 10 — Hora Final -->
           <div class="form-group">
             <label for="hora_final">Hora Final <span class="required">*</span></label>
-            <input type="text" id="hora_final" name="hora_final" placeholder="HH:MM:SS"
-                   maxlength="8" autocomplete="off">
+            <input type="time" id="hora_final" name="hora_final" autocomplete="off">
             <div class="error-msg" id="error-hora_final"></div>
           </div>
         </div>
@@ -233,6 +238,8 @@
   <div id="toast-container"></div>
 
   <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="js/validation.js"></script>
   <script src="js/camera.js"></script>
   <script src="js/offline.js"></script>

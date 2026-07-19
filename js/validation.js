@@ -5,14 +5,12 @@ window.UTE_PE3 = window.UTE_PE3 || {};
 
 UTE_PE3.Validation = {
   rules: {
-    os_number:  { regex: /^[0-9]{6}$/,           msg: 'Exatamente 6 dígitos numéricos' },
     pts:        { regex: /^\d{1,6}-\d{2}$/,       msg: 'Formato: 830-26 (número-hífen-ano)' },
     descricao:  { minLen: 10,                      msg: 'Mínimo 10 caracteres' },
     local:      { regex: /^[A-Za-z0-9 _-]{3,30}$/,msg: '3 a 30 caracteres (letras, números, espaço, _ ou -)' },
-    supervisor: { required: true,                   msg: 'Supervisor é obrigatório' },
     data:       { isDate: true, notFuture: true,    msg: 'Data inválida ou futura' },
-    hora_inicial:{ isTime: true,                    msg: 'Hora inválida (formato HH:MM:SS)' },
-    hora_final: { isTime: true,                     msg: 'Hora inválida (formato HH:MM:SS)' },
+    hora_inicial:{ isTime: true,                    msg: 'Hora inválida' },
+    hora_final: { isTime: true,                     msg: 'Hora inválida' },
     horimetro:  { range: [0, 999999],               msg: 'Valor entre 0 e 999.999' },
   },
 
@@ -24,13 +22,17 @@ UTE_PE3.Validation = {
     if (rule.minLen && value.length < rule.minLen) return rule.msg;
     if (rule.required && !value.trim()) return rule.msg;
     if (rule.isDate) {
-      const parts = value.split('/');
-      if (parts.length !== 3) return rule.msg;
-      const d = new Date(+parts[2], +parts[1] - 1, +parts[0]);
-      if (isNaN(d.getTime()) || d.getDate() !== +parts[0]) return rule.msg;
-      if (rule.notFuture && d > new Date()) return 'Data não pode ser futura';
+      // Input nativo type="date" — formato yyyy-mm-dd garantido pelo navegador quando preenchido
+      if (!value) return rule.msg;
+      const d = new Date(value + 'T00:00:00');
+      if (isNaN(d.getTime())) return rule.msg;
+      if (rule.notFuture) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (d > today) return 'Data não pode ser futura';
+      }
     }
-    if (rule.isTime && !/^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(value)) return rule.msg;
+    if (rule.isTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return rule.msg;
     if (rule.range) {
       const n = Number(value);
       if (value !== '' && (isNaN(n) || n < rule.range[0] || n > rule.range[1])) return rule.msg;
@@ -54,7 +56,7 @@ UTE_PE3.Validation = {
 
   validateAll() {
     let valid = true;
-    const fields = ['os_number', 'pts', 'descricao', 'local', 'supervisor', 'data', 'hora_inicial', 'hora_final'];
+    const fields = ['pts', 'descricao', 'local', 'data', 'hora_inicial', 'hora_final'];
 
     for (const name of fields) {
       const el = document.getElementById(name);
@@ -73,10 +75,24 @@ UTE_PE3.Validation = {
       valid = false;
     }
 
+    // Validate at least 1 OS number
+    const osNumbers = UTE_PE3.state?.os_numbers || [];
+    if (osNumbers.length === 0) {
+      this.showError('os_number', 'Adicione pelo menos 1 número de OS');
+      valid = false;
+    }
+
     // Validate at least 1 technician
     const tecnicos = UTE_PE3.state?.tecnicos || [];
     if (tecnicos.length === 0) {
       this.showError('tecnico', 'Adicione pelo menos 1 técnico');
+      valid = false;
+    }
+
+    // Validate at least 1 supervisor
+    const supervisores = UTE_PE3.state?.supervisores || [];
+    if (supervisores.length === 0) {
+      this.showError('supervisor', 'Adicione pelo menos 1 supervisor');
       valid = false;
     }
 

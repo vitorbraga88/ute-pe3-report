@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ute-pe3-v1';
+const CACHE_NAME = 'ute-pe3-v2';
 const ASSETS = [
   '/ute-pe3-report/',
   '/ute-pe3-report/index.html',
@@ -10,7 +10,8 @@ const ASSETS = [
   '/ute-pe3-report/js/signature.js',
   '/ute-pe3-report/js/report.js',
   '/ute-pe3-report/manifest.json',
-  '/ute-pe3-report/assets/logo-ute.png'
+  '/ute-pe3-report/assets/logo-ute.png',
+  '/ute-pe3-report/assets/icons/favicon.ico'
 ];
 
 self.addEventListener('install', (e) => {
