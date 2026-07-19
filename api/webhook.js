@@ -4,10 +4,10 @@
  * Currently embedded in app.js; provided here as documentation reference.
  */
 
-// Webhook URL: http://100.74.176.72:5678/webhook/ute-pe3-os
+// Webhook URL: https://servidor-203.tail43f430.ts.net/webhook/ute-pe3-os
 // Payload format matches the spec.
 
-const WEBHOOK_URL = 'http://100.74.176.72:5678/webhook/ute-pe3-os';
+const WEBHOOK_URL = 'https://servidor-203.tail43f430.ts.net/webhook/ute-pe3-os';
 
 // --- Example Fetch ---
 // fetch(WEBHOOK_URL, {

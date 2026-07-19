@@ -133,16 +133,17 @@ UTE_PE3.App = {
       UTE_PE3.Validation.clearError('os_number');
     });
 
-    // PTS — auto append -YY
+    // PTS — auto-append -YY on blur (not input) to avoid double-append
     document.getElementById('pts').addEventListener('input', (e) => {
-      let v = e.target.value.replace(/[^\d-]/g, '');
-      // If user types digits only, autocorrect to NNN-YY
-      if (/^\d+$/.test(v) && v.length >= 3 && !v.includes('-')) {
-        const yy = String(new Date().getFullYear()).slice(-2);
-        v = v + '-' + yy;
-      }
-      e.target.value = v;
+      e.target.value = e.target.value.replace(/[^\d-]/g, '');
       UTE_PE3.Validation.clearError('pts');
+    });
+    document.getElementById('pts').addEventListener('blur', (e) => {
+      let v = e.target.value.trim();
+      if (/^\d+$/.test(v) && v.length >= 3) {
+        const yy = String(new Date().getFullYear()).slice(-2);
+        e.target.value = v + '-' + yy;
+      }
     });
 
     // Date mask dd/mm/aaaa
@@ -391,7 +392,7 @@ UTE_PE3.App = {
   // ─── Webhook (n8n) ────────────────────────
 
   async sendToWebhook(data) {
-    const webhookUrl = 'http://100.74.176.72:5678/webhook/ute-pe3-os';
+    const webhookUrl = 'https://servidor-203.tail43f430.ts.net/webhook/ute-pe3-os';
 
     // Strip base64 images for the webhook payload (they're large)
     // The n8n workflow will generate the PDF server-side

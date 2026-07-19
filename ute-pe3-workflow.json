@@ -16,7 +16,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse incoming OS data\nconst data = $input.first().json;\n\n// Validate required fields\nif (!data.os_number || !data.pts) {\n  throw new Error('Campos obrigatorios faltando: os_number, pts');\n}\n\n// Format date for filename\nconst dateStr = (data.data || '').replace(/\\//g, '-');\n\n// Prepare structured data\nreturn {\n  ...data,\n  filename: `OS_${data.os_number}_${dateStr}.pdf`,\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "// Parse incoming OS data — n8n Webhook node nests the POST payload under .body\nconst data = $input.first().json.body || $input.first().json;\n\n// Validate required fields\nif (!data.os_number || !data.pts) {\n  throw new Error('Campos obrigatorios faltando: os_number, pts');\n}\n\n// Format date for filename\nconst dateStr = (data.data || '').replace(/\\//g, '-');\n\n// Prepare structured data\nreturn {\n  ...data,\n  filename: `OS_${data.os_number}_${dateStr}.pdf`,\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "parse-node",
       "name": "Parse & Validate",
@@ -28,28 +28,18 @@
       "parameters": {
         "method": "POST",
         "url": "https://openrouter.ai/api/v1/chat/completions",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Authorization", "value": "Bearer {{$env.OPENROUTER_API_KEY}}" },
-            { "name": "HTTP-Referer", "value": "https://ute-pe3.servidor-203.ts.net" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}" },
+            { "name": "HTTP-Referer", "value": "https://servidor-203.tail43f430.ts.net" },
             { "name": "X-Title", "value": "UTE-PE3 Report" }
           ]
         },
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            { "name": "model", "value": "deepseek/deepseek-chat" },
-            { "name": "messages[0][role]", "value": "system" },
-            { "name": "messages[0][content]", "value": "Voce e um assistente tecnico de manutencao industrial. Resuma tecnicamente a descricao fornecida, mantendo detalhes tecnicos relevantes. Maximo 3 frases." },
-            { "name": "messages[1][role]", "value": "user" },
-            { "name": "messages[1][content]", "value": "={{ $json.descricao_detalhada || $json.descricao }}" },
-            { "name": "max_tokens", "value": 300 },
-            { "name": "temperature", "value": 0.3 }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek/deepseek-chat', messages: [ { role: 'system', content: 'Voce e um assistente tecnico de manutencao industrial. Resuma tecnicamente a descricao fornecida, mantendo detalhes tecnicos relevantes. Maximo 3 frases.' }, { role: 'user', content: $json.descricao_detalhada || $json.descricao } ], max_tokens: 300, temperature: 0.3 }) }}",
         "options": { "timeout": 30000 }
       },
       "id": "openrouter-node",
@@ -60,7 +50,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const prev = $input.first().json;\nconst llmResponse = $('OpenRouter — Resumir').first().json;\nconst descResumida = llmResponse?.choices?.[0]?.message?.content || prev.descricao_detalhada || prev.descricao;\n\nreturn { ...prev, descricao_resumida: descResumida.trim() };"
+        "jsCode": "const prev = $('Parse & Validate').first().json;\nconst llmResponse = $input.first().json;\nconst descResumida = llmResponse?.choices?.[0]?.message?.content || prev.descricao_detalhada || prev.descricao;\n\nreturn { ...prev, descricao_resumida: (descResumida || '').trim() };"
       },
       "id": "extract-summary",
       "name": "Extract Summary",
@@ -70,105 +60,57 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\n\n// Build HTML report\nconst html = `<!DOCTYPE html>\n<html lang=\"pt-BR\">\n<head><meta charset=\"UTF-8\"><style>\n  @page { margin: 15mm; size: A4; }\n  body { font-family: Arial, sans-serif; color: #1f2937; font-size: 11px; }\n  .page { page-break-after: always; }\n  .page:last-child { page-break-after: auto; }\n  .header { border-bottom: 2px solid #1e40af; padding-bottom: 10px; margin-bottom: 14px; }\n  .header h1 { color: #1e40af; font-size: 16px; margin: 0 0 2px; }\n  .header .sub { color: #6b7280; font-size: 10px; }\n  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }\n  .field { margin-bottom: 10px; }\n  .field label { font-size: 8px; color: #6b7280; text-transform: uppercase; font-weight: bold; }\n  .field .value { font-size: 11px; font-weight: 500; }\n  .section-title { font-size: 13px; color: #1e40af; font-weight: bold; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin: 14px 0 8px; }\n  .status-finalizado { background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 12px; font-size: 9px; font-weight: 600; }\n  .photos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }\n  .photo-entry img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }\n  .photo-entry p { font-size: 9px; color: #666; margin: 2px 0 0; }\n  .signature-img { max-width: 220px; }\n</style></head><body>\n\n<div class=\"page\">\n  <div class=\"header\">\n    <h1>UTE Pernambuco III</h1>\n    <div class=\"sub\">Relatorio de Ordem de Servico — OS ${data.os_number || ''}</div>\n  </div>\n\n  <div class=\"grid\">\n    <div class=\"field\"><label>OS No</label><div class=\"value\">${data.os_number || ''}</div></div>\n    <div class=\"field\"><label>PTS No</label><div class=\"value\">${data.pts || ''}</div></div>\n    <div class=\"field\"><label>Data</label><div class=\"value\">${data.data || ''}</div></div>\n    <div class=\"field\"><label>Status</label><div class=\"value\"><span class=\"status-finalizado\">Finalizado</span></div></div>\n    <div class=\"field\"><label>Local / TAG</label><div class=\"value\">${data.local || ''}</div></div>\n    <div class=\"field\"><label>Supervisor</label><div class=\"value\">${data.supervisor || ''}</div></div>\n    <div class=\"field\"><label>Hora Inicial</label><div class=\"value\">${data.hora_inicial || ''}</div></div>\n    <div class=\"field\"><label>Hora Final</label><div class=\"value\">${data.hora_final || ''}</div></div>\n    <div class=\"field\"><label>Horimetro</label><div class=\"value\">${data.horimetro || '—'}</div></div>\n  </div>\n\n  <div class=\"field\" style=\"margin-top:8px\"><label>Tecnicos</label><div class=\"value\">${(data.tecnicos || []).join(', ')}</div></div>\n\n  <div class=\"section-title\">Descricao</div>\n  <div class=\"field\"><label>Resumo</label><div class=\"value\">${data.descricao || ''}</div></div>\n  <div class=\"field\"><label>Resumo Tecnico (IA)</label><div class=\"value\">${data.descricao_resumida || ''}</div></div>\n  <div class=\"field\"><label>Descricao Detalhada</label><div class=\"value\" style=\"white-space:pre-wrap\">${data.descricao_detalhada || ''}</div></div>\n  ${data.observacoes ? '<div class=\"field\"><label>Observacoes</label><div class=\"value\">' + data.observacoes + '</div></div>' : ''}\n  ${data.assinatura ? '<div class=\"section-title\">Assinatura</div><img src=\"' + data.assinatura + '\" class=\"signature-img\">' : ''}\n</div>\n\n${(data.fotos || []).length ? '<div class=\"page\"><div class=\"header\"><h1>Relatorio Fotografico</h1></div><div class=\"photos-grid\">' + data.fotos.map((f,i) => '<div class=\"photo-entry\"><img src=\"' + f.base64 + '\"><p>' + (f.descricao || 'Foto ' + (i+1)) + '</p></div>').join('') + '</div></div>' : ''}\n\n${data.foto_pts ? '<div class=\"page\"><div class=\"header\"><h1>Permissao de Trabalho — Anexo</h1></div><img src=\"' + data.foto_pts + '\" style=\"max-width:100%\"></div>' : ''}\n\n</body></html>`;\n\nreturn { html, filename: data.filename, ...data };"
+        "method": "POST",
+        "url": "http://100.74.176.72:8087/save",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 10000 }
       },
-      "id": "build-html",
-      "name": "Build HTML Report",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1050, 300]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO ordens_servico (os_number, pts, descricao, local, status, tecnicos, supervisor, data, hora_inicial, hora_final, horimetro, descricao_detalhada, descricao_resumida, observacoes, assinatura, fotos, foto_pts, created_at) VALUES ('{{ $json.os_number }}', '{{ $json.pts }}', '{{ $json.descricao }}', '{{ $json.local }}', 'Finalizado', '{{ JSON.stringify($json.tecnicos) }}', '{{ $json.supervisor }}', '{{ $json.data }}', '{{ $json.hora_inicial }}', '{{ $json.hora_final }}', '{{ $json.horimetro }}', '{{ $json.descricao_detalhada }}', '{{ $json.descricao_resumida }}', '{{ $json.observacoes }}', '{{ $json.assinatura }}', '{{ JSON.stringify($json.fotos) }}', '{{ $json.foto_pts }}', datetime('now', 'localtime'));",
-        "options": {}
-      },
-      "id": "sqlite-node",
-      "name": "SQLite — Salvar OS",
-      "type": "n8n-nodes-base.sqlite",
-      "typeVersion": 1,
-      "position": [1050, 100],
-      "alwaysOutputData": false
-    },
-    {
-      "parameters": {
-        "operation": "fromHtml",
-        "htmlField": "html",
-        "options": {
-          "format": "A4",
-          "landscape": false,
-          "printBackground": true,
-          "marginTop": 15,
-          "marginBottom": 15,
-          "marginLeft": 15,
-          "marginRight": 15
-        }
-      },
-      "id": "pdf-node",
-      "name": "Generate PDF",
-      "type": "n8n-nodes-base.htmlToPdf",
-      "typeVersion": 1,
-      "position": [1250, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "const pdfData = $input.first().json.data; // base64 PDF\nconst meta = $('Build HTML Report').first().json;\n\nreturn {\n  file_name: meta.filename,\n  file_data: pdfData,\n  mime_type: 'application/pdf'\n};"
-      },
-      "id": "prepare-attachment",
-      "name": "Prepare Attachment",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1450, 300]
-    },
-    {
-      "parameters": {
-        "fromEmail": "ute-pe3@servidor-203.ts.net",
-        "toEmail": "vitorbraga88@gmail.com",
-        "subject": "=OS {{ $json.os_number }} — Finalizada — UTE PE3",
-        "text": "OS {{ $json.os_number }} (PTS {{ $json.pts }}) finalizada em {{ $json.data }}.\n\nLocal: {{ $json.local }}\nTécnicos: {{ ($json.tecnicos || []).join(', ') }}\n\nResumo: {{ $json.descricao_resumida || $json.descricao }}",
-        "attachments": ["data"],
-        "options": {}
-      },
-      "id": "email-node",
-      "name": "Send Email",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2,
-      "position": [1650, 300]
-    },
-    {
-      "parameters": {
-        "chatId": "={{$env.TELEGRAM_CHAT_ID}}",
-        "text": "=📋 *OS Finalizada*\n\n*OS:* {{ $json.os_number }}\n*PTS:* {{ $json.pts }}\n*Data:* {{ $json.data }}\n*Local:* {{ $json.local }}\n*Técnicos:* {{ ($json.tecnicos || []).join(', ') }}\n\n*Resumo IA:* {{ $json.descricao_resumida || $json.descricao }}",
-        "additionalFields": {
-          "parse_mode": "Markdown",
-          "disable_notification": false,
-          "reply_markup": JSON.stringify({
-            "inline_keyboard": [[
-              { "text": "📋 Relatório", "callback_data": "report_{{ $json.os_number }}" },
-              { "text": "📸 Imagens", "callback_data": "photos_{{ $json.os_number }}" }
-            ]]
-          })
-        }
-      },
-      "id": "telegram-node",
-      "name": "Telegram — Notify",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.1,
-      "position": [1650, 100],
-      "credentials": { "telegramApi": "UTE-PE3 Bot" }
+      "id": "save-sqlite-node",
+      "name": "Save to SQLite",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 400]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\"success\": true, \"os\": \"{{ $json.os_number }}\", \"filename\": \"{{ $json.filename }}\"}",
+        "responseBody": "={\"success\": true, \"os\": \"{{ $json.os_number || $('Extract Summary').first().json.os_number }}\"}",
         "options": {}
       },
       "id": "response-node",
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1850, 300]
+      "position": [1250, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst chatIds = ['5118460498', '8971897435', '8676263350'];\nreturn chatIds.map((chatId) => ({ ...item, chat_id: chatId }));"
+      },
+      "id": "fanout-chats",
+      "name": "Fan Out Chats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $json.chat_id, text: '📋 *OS Finalizada*\\n\\n*OS:* ' + $json.os_number + '\\n*PTS:* ' + $json.pts + '\\n*Data:* ' + $json.data + '\\n*Local:* ' + $json.local + '\\n*Técnicos:* ' + (($json.tecnicos || []).join(', ')) + '\\n\\n*Resumo IA:* ' + ($json.descricao_resumida || $json.descricao), parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[ { text: '📋 Relatório', callback_data: 'report_' + $json.os_number }, { text: '📸 Imagens', callback_data: 'photos_' + $json.os_number } ]] } }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "telegram-node",
+      "name": "Telegram — Notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 200]
     }
   ],
   "connections": {
@@ -183,24 +125,17 @@
     },
     "Extract Summary": {
       "main": [
-        [ { "node": "Build HTML Report", "type": "main", "index": 0 } ],
-        [ { "node": "SQLite — Salvar OS", "type": "main", "index": 0 } ]
+        [
+          { "node": "Save to SQLite", "type": "main", "index": 0 },
+          { "node": "Fan Out Chats", "type": "main", "index": 0 }
+        ]
       ]
     },
-    "Build HTML Report": {
-      "main": [[ { "node": "Generate PDF", "type": "main", "index": 0 } ]]
-    },
-    "Generate PDF": {
-      "main": [[ { "node": "Prepare Attachment", "type": "main", "index": 0 } ]]
-    },
-    "Prepare Attachment": {
-      "main": [
-        [ { "node": "Send Email", "type": "main", "index": 0 } ],
-        [ { "node": "Telegram — Notify", "type": "main", "index": 0 } ]
-      ]
-    },
-    "Send Email": {
+    "Save to SQLite": {
       "main": [[ { "node": "Respond to Webhook", "type": "main", "index": 0 } ]]
+    },
+    "Fan Out Chats": {
+      "main": [[ { "node": "Telegram — Notify", "type": "main", "index": 0 } ]]
     }
   },
   "settings": {
@@ -208,6 +143,6 @@
   },
   "staticData": null,
   "pinData": {},
-  "versionId": "1.0.0",
+  "versionId": "2.0.0",
   "active": true
 }

@@ -13,12 +13,12 @@ Sistema de gestão de Ordens de Serviço (OS) e Permissões de Trabalho (PTS) �
 - Entrada por voz (Web Speech API, pt-BR)
 - Relatório fotográfico com compressão automática
 - Geração de PDF automática
-- Integração n8n → OpenRouter (resumo IA) → Telegram + Email
+- Integração n8n → OpenRouter (resumo IA) → SQLite (via save-server) + Telegram (3 chats)
 - PWA instalável no celular (iOS e Android)
 - Modo offline com IndexedDB
 
 ## Stack
-HTML5 · Tailwind CSS · Vanilla JS · SQLite · n8n · Telegram Bot API
+HTML5 · CSS · Vanilla JS · SQLite · n8n · Telegram Bot API
 
 ## Deploy
 ```bash
