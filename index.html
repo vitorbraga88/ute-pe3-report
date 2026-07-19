@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1e40af">
+  <meta name="description" content="Sistema de Gestao de Ordens de Servico e PTS - UTE Pernambuco III">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="assets/icons/favicon.ico" type="image/x-icon">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <title>UTE-PE3 — OS/PTS</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Offline Indicator -->
+  <div class="offline-badge" id="offline-badge">⚠️ Offline — dados serao salvos localmente</div>
+
+  <!-- Header -->
+  <header class="header">
+    <span class="logo-badge"><img src="assets/logo-ute.png" alt="UTE PE3"></span>
+    <div>
+      <h1>UTE Pernambuco III</h1>
+      <div class="header-sub">Ordem de Serviço / Permissão de Trabalho</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <form id="os-form" novalidate>
+
+      <!-- Card: Identificação -->
+      <div class="card">
+        <div class="card-title"><span class="icon">📋</span> Identificação</div>
+
+        <!-- 1 — Número(s) da OS -->
+        <div class="form-group">
+          <label for="os_number">Número(s) da OS <span class="required">*</span></label>
+          <div class="tag-list" id="os-list"></div>
+          <div class="input-group">
+            <input type="text" id="os_number" inputmode="numeric" maxlength="6"
+                   placeholder="202607" autocomplete="off">
+            <button type="button" class="btn btn-primary btn-sm" onclick="UTE_PE3.App.addOS()">+</button>
+          </div>
+          <div class="error-msg" id="error-os_number"></div>
+        </div>
+
+        <!-- 2 — Número da PTS -->
+        <div class="form-group">
+          <label for="pts">Número da PTS <span class="required">*</span></label>
+          <input type="text" id="pts" name="pts" placeholder="830-26" autocomplete="off">
+          <div class="error-msg" id="error-pts"></div>
+        </div>
+
+        <!-- 3 — Descrição -->
+        <div class="form-group">
+          <label for="descricao">Descrição (resumo) <span class="required">*</span></label>
+          <input type="text" id="descricao" name="descricao"
+                 placeholder="Ex.: Troca de filtro de óleo DG-06">
+          <div class="error-msg" id="error-descricao"></div>
+        </div>
+
+        <!-- 4 — Local / TAG -->
+        <div class="form-group">
+          <label for="local">Local / TAG do Equipamento <span class="required">*</span></label>
+          <div class="autocomplete-wrapper">
+            <input type="text" id="local" name="local" placeholder="Ex.: DG-06"
+                   autocomplete="off" oninput="UTE_PE3.App.onAutocompleteInput('local')"
+                   onfocus="UTE_PE3.App.onAutocompleteInput('local')">
+            <div class="autocomplete-list" id="autocomplete-local"></div>
+          </div>
+          <div class="error-msg" id="error-local"></div>
+        </div>
+
+        <!-- 5 — Status -->
+        <div class="form-group">
+          <label>Status</label>
+          <input type="hidden" id="status" name="status" value="Aberto">
+          <div class="segmented" role="group" aria-label="Status">
+            <button type="button" class="seg-option" aria-pressed="true" onclick="UTE_PE3.App.setStatus(this, 'Aberto')">Aberto</button>
+            <button type="button" class="seg-option" aria-pressed="false" onclick="UTE_PE3.App.setStatus(this, 'Em Andamento')">Em Andamento</button>
+            <button type="button" class="seg-option" aria-pressed="false" onclick="UTE_PE3.App.setStatus(this, 'Finalizado')">Finalizado</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card: Equipe -->
+      <div class="card">
+        <div class="card-title"><span class="icon">👥</span> Equipe</div>
+
+        <!-- 6 — Técnicos -->
+        <div class="form-group">
+          <label for="tecnico">Técnico(s) <span class="required">*</span></label>
+          <div class="tag-list" id="tecnicos-list"></div>
+          <div class="input-group">
+            <div class="autocomplete-wrapper" style="flex:1">
+              <input type="text" id="tecnico" placeholder="Nome do técnico"
+                     autocomplete="off" oninput="UTE_PE3.App.onAutocompleteInput('tecnico')"
+                     onfocus="UTE_PE3.App.onAutocompleteInput('tecnico')">
+              <div class="autocomplete-list" id="autocomplete-tecnico"></div>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="UTE_PE3.App.addTecnico()">+</button>
+          </div>
+          <div class="error-msg" id="error-tecnico"></div>
+        </div>
+
+        <!-- 7 — Supervisor(es) -->
+        <div class="form-group">
+          <label for="supervisor">Supervisor(es) <span class="required">*</span></label>
+          <div class="tag-list" id="supervisores-list"></div>
+          <div class="input-group">
+            <div class="autocomplete-wrapper" style="flex:1">
+              <input type="text" id="supervisor" placeholder="Nome do supervisor"
+                     autocomplete="off" oninput="UTE_PE3.App.onAutocompleteInput('supervisor')"
+                     onfocus="UTE_PE3.App.onAutocompleteInput('supervisor')">
+              <div class="autocomplete-list" id="autocomplete-supervisor"></div>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="UTE_PE3.App.addSupervisor()">+</button>
+          </div>
+          <div class="error-msg" id="error-supervisor"></div>
+        </div>
+      </div>
+
+      <!-- Card: Data/Hora -->
+      <div class="card">
+        <div class="card-title"><span class="icon">🕐</span> Data e Horário</div>
+
+        <!-- 8 — Data -->
+        <div class="form-group">
+          <label for="data">Data <span class="required">*</span></label>
+          <input type="date" id="data" name="data" autocomplete="off">
+          <div class="error-msg" id="error-data"></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <!-- 9 — Hora Inicial -->
+          <div class="form-group">
+            <label for="hora_inicial">Hora Inicial <span class="required">*</span></label>
+            <input type="time" id="hora_inicial" name="hora_inicial" autocomplete="off">
+            <div class="error-msg" id="error-hora_inicial"></div>
+          </div>
+
+          <!-- 10 — Hora Final -->
+          <div class="form-group">
+            <label for="hora_final">Hora Final <span class="required">*</span></label>
+            <input type="time" id="hora_final" name="hora_final" autocomplete="off">
+            <div class="error-msg" id="error-hora_final"></div>
+          </div>
+        </div>
+
+        <!-- 11 — Horímetro -->
+        <div class="form-group">
+          <label for="horimetro">Horímetro</label>
+          <input type="number" id="horimetro" name="horimetro" min="0" max="999999"
+                 placeholder="Horas de operação">
+          <div class="error-msg" id="error-horimetro"></div>
+        </div>
+      </div>
+
+      <!-- Card: Detalhes -->
+      <div class="card">
+        <div class="card-title"><span class="icon">📝</span> Detalhes da OS</div>
+
+        <!-- 12 — Descrição Detalhada com voz -->
+        <div class="form-group">
+          <label for="descricao_detalhada">Descrição Detalhada</label>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <textarea id="descricao_detalhada" name="descricao_detalhada" rows="4"
+                      placeholder="Descreva o serviço realizado..."></textarea>
+            <button type="button" class="voice-btn" id="voice-btn" title="Entrada por voz"
+                    onclick="UTE_PE3.App.toggleVoice()">🎤</button>
+          </div>
+        </div>
+
+        <!-- 13 — Observações -->
+        <div class="form-group">
+          <label for="observacoes">Observações</label>
+          <textarea id="observacoes" name="observacoes" rows="2"
+                    placeholder="Observações adicionais..."></textarea>
+        </div>
+      </div>
+
+      <!-- Card: Assinatura -->
+      <div class="card">
+        <div class="card-title"><span class="icon">✍️</span> Assinatura Digital</div>
+        <div class="signature-container">
+          <canvas class="signature-canvas" id="signature-canvas"></canvas>
+        </div>
+        <div class="signature-actions">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="UTE_PE3.Signature.clear()">
+            Limpar
+          </button>
+        </div>
+      </div>
+
+      <!-- Card: Relatório Fotográfico -->
+      <div class="card">
+        <div class="card-title"><span class="icon">📸</span> Relatório Fotográfico</div>
+        <div class="photo-grid" id="photo-grid"></div>
+        <div class="photo-actions">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="UTE_PE3.Camera.addPhoto('camera')">📷 Tirar Foto</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="UTE_PE3.Camera.addPhoto('gallery')">🖼️ Galeria</button>
+        </div>
+      </div>
+
+      <!-- Card: Foto PTS -->
+      <div class="card">
+        <div class="card-title"><span class="icon">📄</span> Foto da Permissão de Trabalho <span class="required">*</span></div>
+        <div id="pts-photo-container"></div>
+        <div class="photo-actions">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="UTE_PE3.Camera.capturePTS('camera')">📷 Fotografar</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="UTE_PE3.Camera.capturePTS('gallery')">🖼️ Galeria</button>
+        </div>
+        <div class="error-msg" id="error-foto_pts"></div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="action-bar">
+        <button type="button" class="btn btn-secondary" id="btn-draft" onclick="UTE_PE3.App.saveDraft()">
+          💾 Salvar Rascunho
+        </button>
+        <button type="button" class="btn btn-success" id="btn-finalize" onclick="UTE_PE3.App.finalize()">
+          ✅ Finalizar
+        </button>
+      </div>
+    </form>
+
+    <!-- Drafts Section -->
+    <div class="card" id="drafts-section" style="display:none">
+      <div class="card-title"><span class="icon">📂</span> Rascunhos Salvos</div>
+      <div id="drafts-list"></div>
+    </div>
+  </main>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="js/validation.js"></script>
+  <script src="js/camera.js"></script>
+  <script src="js/offline.js"></script>
+  <script src="js/signature.js"></script>
+  <script src="js/report.js"></script>
+  <script src="js/app.js"></script>
+
+  <!-- Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>

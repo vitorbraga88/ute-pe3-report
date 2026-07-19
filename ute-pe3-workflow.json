@@ -1,0 +1,384 @@
+{
+  "id": "Fd6R7yrSLfaojyVn",
+  "name": "UTE-PE3 — Ordem de Servico Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ute-pe3-os",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook OS",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Webhook node nests the POST payload under .body\nconst data = $input.first().json.body || $input.first().json;\n\nconst osNumbers = Array.isArray(data.os_numbers) ? data.os_numbers : (data.os_number ? [data.os_number] : []);\nif (osNumbers.length === 0 || !data.pts) {\n  throw new Error('Campos obrigatorios faltando: os_numbers, pts');\n}\n\nconst dateStr = (data.data || '').replace(/-/g, '');\nconst filename = data.pdf_filename || `OS_${osNumbers.join('-')}_${dateStr}.pdf`;\n\nreturn {\n  ...data,\n  os_numbers: osNumbers,\n  supervisores: Array.isArray(data.supervisores) ? data.supervisores : (data.supervisor ? [data.supervisor] : []),\n  filename,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "parse-node",
+      "name": "Parse & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://servidor-203.tail43f430.ts.net"
+            },
+            {
+              "name": "X-Title",
+              "value": "UTE-PE3 Report"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek/deepseek-chat', messages: [ { role: 'system', content: 'Você é um engenheiro de manutenção industrial. Reescreva a descrição do serviço em português técnico, claro e gramaticalmente correto, adicionando detalhamento técnico do serviço executado (equipamento, procedimento e condição encontrada). Responda somente com o texto reescrito em português, sem títulos nem comentários.' }, { role: 'user', content: $json.descricao_detalhada || $json.descricao } ], max_tokens: 700, temperature: 0.3 }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "openrouter-node",
+      "name": "OpenRouter — Resumir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Parse & Validate').first().json;\nconst llmResponse = $input.first().json;\nconst descResumida = llmResponse?.choices?.[0]?.message?.content || prev.descricao_detalhada || prev.descricao;\n\nreturn { ...prev, descricao_resumida: (descResumida || '').trim() };"
+      },
+      "id": "extract-summary",
+      "name": "Extract Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.74.176.72:8087/save-pdf",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ filename: $json.filename, pdf_base64: $json.pdf_base64 }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "save-pdf-node",
+      "name": "Save PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Extract Summary').first().json;\nconst pdfResp = $input.first().json;\nreturn { ...data, pdf_url: pdfResp?.url || null, pdf_path: pdfResp?.path || null };"
+      },
+      "id": "merge-pdf-url",
+      "name": "Merge PDF URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { pdf_base64, ...rest } = $input.first().json;\nreturn { ...rest, status: 'Finalizado' };"
+      },
+      "id": "prepare-sqlite-payload",
+      "name": "Prepare SQLite Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1450,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.74.176.72:8087/save",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "save-sqlite-node",
+      "name": "Save to SQLite",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1650,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": true, \"os_numbers\": {{ JSON.stringify($('Merge PDF URL').first().json.os_numbers) }}, \"pdf_url\": \"{{ $('Merge PDF URL').first().json.pdf_url }}\"}",
+        "options": {}
+      },
+      "id": "response-node",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst chatIds = ['5118460498', '8971897435', '8676263350'];\nreturn chatIds.map((chatId) => ({ ...item, chat_id: chatId }));"
+      },
+      "id": "fanout-chats",
+      "name": "Fan Out Chats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1450,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $json.chat_id, text: '📋 *OS Finalizada*\\n\\n*OS:* ' + ($json.os_numbers || []).join(', ') + '\\n*PTS:* ' + $json.pts + '\\n*Data:* ' + $json.data + '\\n*Local:* ' + $json.local + '\\n*Técnicos:* ' + (($json.tecnicos || []).join(', ')) + '\\n*Supervisor(es):* ' + (($json.supervisores || []).join(', ')) + '\\n\\n*Detalhamento Técnico (IA):* ' + ($json.descricao_resumida || $json.descricao), parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[ { text: '🌐 Abrir Aplicação', url: 'https://servidor-203.tail43f430.ts.net/ute-pe3-report/' } ], [ { text: '📁 Pasta de PDFs', url: 'https://servidor-203.tail43f430.ts.net/ute-pe3-report/relatorios/' } ]] } }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "telegram-node",
+      "name": "Telegram — Notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1650,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.map((it) => {\n  const item = it.json;\n  return {\n    json: item,\n    binary: {\n      data: {\n        data: item.pdf_base64,\n        mimeType: 'application/pdf',\n        fileExtension: 'pdf',\n        fileName: item.filename || item.pdf_filename || 'relatorio.pdf'\n      }\n    }\n  };\n});"
+      },
+      "id": "build-pdf-binary",
+      "name": "Build PDF Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1650,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendDocument",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formData",
+              "name": "chat_id",
+              "value": "={{ $json.chat_id }}"
+            },
+            {
+              "parameterType": "formData",
+              "name": "caption",
+              "value": "=📄 OS {{ ($json.os_numbers || []).join(', ') }} — Relatório completo"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "document",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "telegram-pdf-node",
+      "name": "Telegram — Send PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1850,
+        220
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook OS": {
+      "main": [
+        [
+          {
+            "node": "Parse & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Validate": {
+      "main": [
+        [
+          {
+            "node": "OpenRouter — Resumir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter — Resumir": {
+      "main": [
+        [
+          {
+            "node": "Extract Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Summary": {
+      "main": [
+        [
+          {
+            "node": "Save PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save PDF": {
+      "main": [
+        [
+          {
+            "node": "Merge PDF URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge PDF URL": {
+      "main": [
+        [
+          {
+            "node": "Prepare SQLite Payload",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fan Out Chats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare SQLite Payload": {
+      "main": [
+        [
+          {
+            "node": "Save to SQLite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to SQLite": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fan Out Chats": {
+      "main": [
+        [
+          {
+            "node": "Telegram — Notify",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build PDF Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build PDF Binary": {
+      "main": [
+        [
+          {
+            "node": "Telegram — Send PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "versionId": "5.1.0",
+  "active": true
+}
