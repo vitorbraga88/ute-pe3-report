@@ -72,7 +72,7 @@ UTE_PE3.Report = {
   <!-- Page 1: Dados da OS -->
   <div class="page">
     <div class="header">
-      <img src="${window.location.origin}/ute-pe3-report/assets/logo.svg" alt="UTE PE3">
+      <img src="${window.location.origin}/ute-pe3-report/assets/logo-ute.png" alt="UTE PE3">
       <div>
         <h1>UTE Pernambuco III</h1>
         <div class="sub">Relatório de Ordem de Serviço</div>

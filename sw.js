@@ -10,7 +10,7 @@ const ASSETS = [
   '/ute-pe3-report/js/signature.js',
   '/ute-pe3-report/js/report.js',
   '/ute-pe3-report/manifest.json',
-  '/ute-pe3-report/assets/logo.svg'
+  '/ute-pe3-report/assets/logo-ute.png'
 ];
 
 self.addEventListener('install', (e) => {
