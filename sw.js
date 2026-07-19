@@ -1,17 +1,17 @@
-const CACHE_NAME = 'ute-pe3-v2';
+const CACHE_NAME = 'ute-pe3-v5';
 const ASSETS = [
-  '/ute-pe3-report/',
-  '/ute-pe3-report/index.html',
-  '/ute-pe3-report/css/styles.css',
-  '/ute-pe3-report/js/app.js',
-  '/ute-pe3-report/js/validation.js',
-  '/ute-pe3-report/js/camera.js',
-  '/ute-pe3-report/js/offline.js',
-  '/ute-pe3-report/js/signature.js',
-  '/ute-pe3-report/js/report.js',
-  '/ute-pe3-report/manifest.json',
-  '/ute-pe3-report/assets/logo-ute.png',
-  '/ute-pe3-report/assets/icons/favicon.ico'
+  './',
+  './index.html',
+  './css/styles.css',
+  './js/app.js',
+  './js/validation.js',
+  './js/camera.js',
+  './js/offline.js',
+  './js/signature.js',
+  './js/report.js',
+  './manifest.json',
+  './assets/logo-ute.png',
+  './assets/icons/favicon.ico'
 ];
 
 self.addEventListener('install', (e) => {
@@ -29,7 +29,26 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  e.respondWith(
-    caches.match(e.request).then((cached) => cached || fetch(e.request))
-  );
+  const req = e.request;
+  if (req.method !== 'GET') return; // nunca intercepta POST (webhook)
+  const isAsset = /\.(png|jpg|jpeg|ico|svg|woff2?)$/.test(new URL(req.url).pathname);
+  if (isAsset) {
+    // cache-first para imagens/ícones
+    e.respondWith(
+      caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then((c) => c.put(req, clone));
+        return res;
+      }))
+    );
+  } else {
+    // network-first para HTML/JS/CSS: online sempre atualizado, offline usa cache
+    e.respondWith(
+      fetch(req, { cache: 'no-cache' }).then((res) => {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then((c) => c.put(req, clone));
+        return res;
+      }).catch(() => caches.match(req))
+    );
+  }
 });

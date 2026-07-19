@@ -41,7 +41,7 @@ UTE_PE3.Report = {
     const osList = esc((data.os_numbers || []).join(', '));
     const supervisorList = esc((data.supervisores || []).join(', '));
     const dataFormatada = esc(this.formatDate(data.data));
-    const logoSrc = `${window.location.origin}/ute-pe3-report/assets/logo-ute.png`;
+    const logoSrc = new URL('assets/logo-ute.png', window.location.href).href;
 
     // Relatório fotográfico: 2 fotos por linha, tamanho padronizado, descrição
     // embaixo. Paginado (6 por página = 3 linhas) para nunca cortar uma foto.
@@ -84,7 +84,10 @@ UTE_PE3.Report = {
     .field label { font-size: 8px; color: #6b7280; text-transform: uppercase; font-weight: 600; display: block; }
     .field .value { font-size: 11px; font-weight: 500; }
     .section-title { font-size: 13px; color: #1e40af; font-weight: 700; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin: 16px 0 10px; }
-    .signature-img { max-width: 250px; height: auto; border: 1px solid #ddd; border-radius: 4px; }
+    .signature-img { max-width: 250px; max-height: 80px; height: auto; border: 1px solid #ddd; border-radius: 4px; background: #fff; }
+    .sig-grid { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 6px; }
+    .sig-box { text-align: center; }
+    .sig-name { font-size: 10px; color: #374151; border-top: 1px solid #9ca3af; margin-top: 4px; padding-top: 3px; min-width: 180px; }
     .photos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .photo-box { border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; background: #fff; }
     .photo-frame { width: 100%; height: 185px; background: #f3f4f6; }
@@ -127,14 +130,20 @@ UTE_PE3.Report = {
 
     <div class="section-title">Descrição</div>
     <div class="field"><label>Resumo</label><div class="value">${esc(data.descricao)}</div></div>
-    ${data.descricao_resumida ? `<div class="field"><label>Detalhamento Técnico (IA)</label><div class="value" style="white-space:pre-wrap">${esc(data.descricao_resumida)}</div></div>` : ''}
+    ${(data.descricao_ia || data.descricao_resumida) ? `<div class="field"><label>Detalhamento Técnico (IA)</label><div class="value" style="white-space:pre-wrap">${esc(data.descricao_ia || data.descricao_resumida)}</div></div>` : ''}
     <div class="field"><label>Descrição Detalhada</label><div class="value" style="white-space:pre-wrap">${esc(data.descricao_detalhada)}</div></div>
 
     ${data.observacoes ? `<div class="field"><label>Observações</label><div class="value">${esc(data.observacoes)}</div></div>` : ''}
 
-    ${data.assinatura ? `
-    <div class="section-title">Assinatura</div>
-    <img src="${data.assinatura}" class="signature-img" alt="Assinatura digital">
+    ${((data.assinaturas && data.assinaturas.length) || data.assinatura) ? `
+    <div class="section-title">Assinaturas</div>
+    <div class="sig-grid">
+      ${(data.assinaturas && data.assinaturas.length ? data.assinaturas : [{ nome: '', img: data.assinatura }]).map((a) => `
+      <div class="sig-box">
+        <img src="${a.img}" class="signature-img" alt="Assinatura">
+        <div class="sig-name">${esc(a.nome) || '&nbsp;'}</div>
+      </div>`).join('')}
+    </div>
     ` : ''}
   </div>
 

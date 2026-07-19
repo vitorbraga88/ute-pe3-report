@@ -163,10 +163,23 @@ select {
 }
 .autocomplete-list.open { display: block; }
 .autocomplete-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 8px 12px;
   cursor: pointer;
   font-size: 0.88rem;
 }
+.autocomplete-item .ac-value { flex: 1; min-height: 24px; display: flex; align-items: center; }
+.autocomplete-item .ac-remove {
+  color: var(--gray-400);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.autocomplete-item .ac-remove:hover { color: var(--danger); background: rgba(220, 38, 38, 0.08); }
 .autocomplete-item:hover, .autocomplete-item.active {
   background: var(--primary-bg);
   color: var(--primary);
@@ -225,6 +238,8 @@ select {
 
 /* Signature */
 .signature-container { position: relative; }
+.signature-container { margin-top: 8px; }
+.signature-actions { margin-top: 8px; display: flex; gap: 8px; }
 .signature-canvas {
   width: 100%;
   height: 180px;

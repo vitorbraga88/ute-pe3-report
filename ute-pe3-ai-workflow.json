@@ -1,0 +1,78 @@
+{
+  "name": "UTE-PE3 — Revisar Descricao (IA)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ute-pe3-ai",
+        "responseMode": "responseNode",
+        "options": { "allowedOrigins": "*" }
+      },
+      "id": "ai-webhook",
+      "name": "Webhook IA",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}" },
+            { "name": "HTTP-Referer", "value": "https://servidor-203.tail43f430.ts.net" },
+            { "name": "X-Title", "value": "UTE-PE3 Report" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek/deepseek-chat', messages: [ { role: 'system', content: 'Você é um engenheiro de manutenção industrial. Reescreva a descrição do serviço em português técnico, claro e gramaticalmente correto, adicionando detalhamento técnico do serviço executado (equipamento, procedimento e condição encontrada). Não invente dados que não estejam na descrição original (modelos, números de série, medições). Responda somente com o texto reescrito em português, sem títulos nem comentários.' }, { role: 'user', content: $json.body.texto || '' } ], max_tokens: 700, temperature: 0.3 }) }}",
+        "options": { "timeout": 45000 }
+      },
+      "id": "ai-openrouter",
+      "name": "OpenRouter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst texto = (r?.choices?.[0]?.message?.content || '').trim();\nif (!texto) throw new Error('IA sem resposta');\nreturn { texto };"
+      },
+      "id": "ai-extract",
+      "name": "Extract Texto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ texto: $json.texto }) }}",
+        "options": {}
+      },
+      "id": "ai-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook IA": {
+      "main": [[{ "node": "OpenRouter", "type": "main", "index": 0 }]]
+    },
+    "OpenRouter": {
+      "main": [[{ "node": "Extract Texto", "type": "main", "index": 0 }]]
+    },
+    "Extract Texto": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

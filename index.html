@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="assets/icons/favicon.ico" type="image/x-icon">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
-  <title>UTE-PE3 — OS/PTS</title>
+  <title>UTE-PE3 — Relatório de OS</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -21,7 +21,7 @@
     <span class="logo-badge"><img src="assets/logo-ute.png" alt="UTE PE3"></span>
     <div>
       <h1>UTE Pernambuco III</h1>
-      <div class="header-sub">Ordem de Serviço / Permissão de Trabalho</div>
+      <div class="header-sub">Relatório de Ordem de Serviço</div>
     </div>
   </header>
 
@@ -171,6 +171,17 @@
           </div>
         </div>
 
+        <!-- 12b — Detalhamento Técnico (IA) -->
+        <div class="form-group">
+          <label for="descricao_ia">Detalhamento Técnico (IA)</label>
+          <textarea id="descricao_ia" name="descricao_ia" rows="5"
+                    placeholder="Toque em ✨ Revisar com IA para gerar o texto técnico a partir da Descrição Detalhada. O resultado pode ser editado antes de finalizar."></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-ai" onclick="UTE_PE3.App.aiReview()">✨ Revisar com IA</button>
+          </div>
+          <div class="error-msg" id="error-descricao_ia"></div>
+        </div>
+
         <!-- 13 — Observações -->
         <div class="form-group">
           <label for="observacoes">Observações</label>
@@ -179,16 +190,39 @@
         </div>
       </div>
 
-      <!-- Card: Assinatura -->
+      <!-- Card: Assinaturas -->
       <div class="card">
-        <div class="card-title"><span class="icon">✍️</span> Assinatura Digital</div>
-        <div class="signature-container">
-          <canvas class="signature-canvas" id="signature-canvas"></canvas>
+        <div class="card-title"><span class="icon">✍️</span> Assinaturas Digitais</div>
+
+        <div class="form-group">
+          <label for="sig-nome-1">Assinatura 1 — Nome <span class="required">*</span></label>
+          <input type="text" id="sig-nome-1" placeholder="Digite o nome — se já houver assinatura salva, ela é inserida" autocomplete="off"
+                 oninput="UTE_PE3.Signature.onNameInput(1)">
+          <div class="signature-container">
+            <canvas class="signature-canvas" id="signature-canvas-1"></canvas>
+          </div>
+          <div class="signature-actions">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="UTE_PE3.Signature.clear(1)">Limpar</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="UTE_PE3.Signature.saveStored(1)">💾 Salvar assinatura</button>
+          </div>
         </div>
-        <div class="signature-actions">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="UTE_PE3.Signature.clear()">
-            Limpar
-          </button>
+
+        <div class="form-group">
+          <label for="sig-nome-2">Assinatura 2 — Nome (opcional)</label>
+          <input type="text" id="sig-nome-2" placeholder="Digite o nome — se já houver assinatura salva, ela é inserida" autocomplete="off"
+                 oninput="UTE_PE3.Signature.onNameInput(2)">
+          <div class="signature-container">
+            <canvas class="signature-canvas" id="signature-canvas-2"></canvas>
+          </div>
+          <div class="signature-actions">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="UTE_PE3.Signature.clear(2)">Limpar</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="UTE_PE3.Signature.saveStored(2)">💾 Salvar assinatura</button>
+          </div>
+        </div>
+
+        <div class="form-group" id="saved-sigs-wrap" style="display:none">
+          <label>Assinaturas salvas — toque para usar, × para excluir</label>
+          <div class="tag-list" id="saved-sigs-list"></div>
         </div>
       </div>
 

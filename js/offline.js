@@ -27,7 +27,7 @@ UTE_PE3.Offline = {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction('drafts', 'readwrite');
       const store = tx.objectStore('drafts');
-      const record = { ...data, created_at: new Date().toISOString(), status: 'Aberto' };
+      const record = { ...data, created_at: new Date().toISOString(), status: data.status || 'Aberto' };
       const req = store.add(record);
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);

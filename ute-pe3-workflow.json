@@ -7,7 +7,7 @@
         "httpMethod": "POST",
         "path": "ute-pe3-os",
         "responseMode": "responseNode",
-        "options": {}
+        "options": { "allowedOrigins": "*" }
       },
       "id": "webhook-trigger",
       "name": "Webhook OS",
@@ -84,6 +84,43 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.descricao_ia || '' }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-ia-editada",
+      "name": "Tem IA Editada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nconst texto = (j.descricao_ia || j.descricao_resumida || j.descricao_detalhada || j.descricao || '').trim();\nreturn { ...j, descricao_resumida: texto };"
+      },
+      "id": "resumo-final",
+      "name": "Resumo Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        950,
+        380
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "http://100.74.176.72:8087/save-pdf",
         "authentication": "none",
@@ -105,7 +142,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $('Extract Summary').first().json;\nconst pdfResp = $input.first().json;\nreturn { ...data, pdf_url: pdfResp?.url || null, pdf_path: pdfResp?.path || null };"
+        "jsCode": "const data = $('Resumo Final').first().json;\nconst pdfResp = $input.first().json;\nreturn { ...data, pdf_url: pdfResp?.url || null, pdf_path: pdfResp?.path || null };"
       },
       "id": "merge-pdf-url",
       "name": "Merge PDF URL",
@@ -268,6 +305,24 @@
       "main": [
         [
           {
+            "node": "Tem IA Editada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem IA Editada?": {
+      "main": [
+        [
+          {
+            "node": "Resumo Final",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "OpenRouter — Resumir",
             "type": "main",
             "index": 0
@@ -287,6 +342,17 @@
       ]
     },
     "Extract Summary": {
+      "main": [
+        [
+          {
+            "node": "Resumo Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resumo Final": {
       "main": [
         [
           {

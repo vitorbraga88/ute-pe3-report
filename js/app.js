@@ -15,6 +15,16 @@ UTE_PE3.state = {
 };
 
 UTE_PE3.App = {
+  /**
+   * Base do webhook n8n, ciente da origem:
+   * - via Caddy (ts.net): mesmo domínio → /webhook (sem CORS/cert)
+   * - via :8086 direto (http): n8n direto na porta 5678 (sem TLS)
+   */
+  get WEBHOOK_BASE() {
+    if (location.hostname.endsWith('.ts.net')) return '/webhook';
+    return `http://${location.hostname}:5678/webhook`;
+  },
+
   /** Initialize the application */
   init() {
     this.loadAutocompleteCache();
@@ -28,8 +38,8 @@ UTE_PE3.App = {
     UTE_PE3.state.supervisores = ['Vitor Braga'];
     this.renderSupervisores();
 
-    // Init signature canvas
-    setTimeout(() => UTE_PE3.Signature.init('signature-canvas'), 100);
+    // Init signature canvases (2 pads + memória)
+    setTimeout(() => UTE_PE3.Signature.init(), 100);
 
     document.getElementById('os-form').addEventListener('submit', (e) => e.preventDefault());
   },
@@ -77,18 +87,33 @@ UTE_PE3.App = {
       return;
     }
 
-    listEl.innerHTML = matches.map((m) =>
-      `<div class="autocomplete-item" data-value="${this.escAttr(m)}">${this.escHtml(m)}</div>`
-    ).join('');
+    listEl.innerHTML = matches.map((m) => `
+      <div class="autocomplete-item" data-value="${this.escAttr(m)}">
+        <span class="ac-value">${this.escHtml(m)}</span>
+        <span class="ac-remove" title="Excluir sugestão">&times;</span>
+      </div>`).join('');
     listEl.classList.add('open');
 
-    // Click handler
     listEl.querySelectorAll('.autocomplete-item').forEach((item) => {
-      item.addEventListener('click', () => {
+      item.querySelector('.ac-value').addEventListener('click', () => {
         input.value = item.dataset.value;
         listEl.classList.remove('open');
       });
+      item.querySelector('.ac-remove').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.removeFromAutocomplete(field, item.dataset.value);
+      });
     });
+  },
+
+  /** Exclui um valor memorizado (digitação errada) */
+  removeFromAutocomplete(field, value) {
+    const list = UTE_PE3.state.autocompleteCache[field] || [];
+    const idx = list.indexOf(value);
+    if (idx >= 0) list.splice(idx, 1);
+    this.saveAutocompleteCache();
+    this.onAutocompleteInput(field);
+    UTE_PE3.UI.toast('Sugestão removida', 'info');
   },
 
   // ─── Técnicos ──────────────────────────
@@ -287,8 +312,12 @@ UTE_PE3.App = {
   // ─── Save Draft ──────────────────────────
 
   async saveDraft() {
+    this.flushPendingInputs();
     const data = this.collectFormData();
-    if (!data.os_number) { UTE_PE3.UI.toast('Preencha ao menos o número da OS', 'error'); return; }
+    if (!data.os_numbers.length && !data.pts && !data.descricao) {
+      UTE_PE3.UI.toast('Preencha ao menos um campo (OS, PTS ou descrição)', 'error');
+      return;
+    }
 
     try {
       await UTE_PE3.Offline.saveDraft(data);
@@ -297,6 +326,14 @@ UTE_PE3.App = {
     } catch (e) {
       UTE_PE3.UI.toast('Erro ao salvar rascunho', 'error');
     }
+  },
+
+  /** Confirma valores digitados mas não adicionados com "+" */
+  flushPendingInputs() {
+    const os = document.getElementById('os_number').value.trim();
+    if (/^\d{6}$/.test(os)) this.addOS();
+    if (document.getElementById('tecnico').value.trim()) this.addTecnico();
+    if (document.getElementById('supervisor').value.trim()) this.addSupervisor();
   },
 
   // ─── Load Drafts ─────────────────────────
@@ -313,7 +350,7 @@ UTE_PE3.App = {
       list.innerHTML = drafts.map((d) => `
         <div class="draft-item" onclick="UTE_PE3.App.loadDraft(${d.id})">
           <div class="draft-info">
-            <div class="draft-id">OS ${this.escHtml(d.os_number || '—')}</div>
+            <div class="draft-id">OS ${this.escHtml((d.os_numbers || []).join(', ') || d.os_number || '—')}${d.status === 'Enviado' ? ' ✅' : ''}</div>
             <div class="draft-date">${new Date(d.created_at).toLocaleDateString('pt-BR')} — ${this.escHtml(d.descricao || '')}</div>
           </div>
           <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();UTE_PE3.App.deleteDraft(${d.id})">🗑</button>
@@ -351,7 +388,7 @@ UTE_PE3.App = {
   populateForm(data) {
     const fields = ['pts', 'descricao', 'local', 'status',
                     'data', 'hora_inicial', 'hora_final', 'horimetro',
-                    'descricao_detalhada', 'observacoes'];
+                    'descricao_detalhada', 'descricao_ia', 'observacoes'];
     fields.forEach((f) => {
       const el = document.getElementById(f);
       if (el && data[f] !== undefined) el.value = data[f] || '';
@@ -397,6 +434,8 @@ UTE_PE3.App = {
   // ─── Finalize ────────────────────────────
 
   async finalize() {
+    this.flushPendingInputs();
+
     if (!UTE_PE3.Validation.validateAll()) {
       UTE_PE3.UI.toast('Corrija os campos com erro', 'error');
       return;
@@ -410,16 +449,14 @@ UTE_PE3.App = {
     }
 
     if (!UTE_PE3.Signature.hasSignature()) {
-      UTE_PE3.UI.toast('Assinatura digital é obrigatória', 'error');
+      UTE_PE3.UI.toast('Assinatura 1 é obrigatória', 'error');
       return;
     }
 
     const data = this.collectFormData();
 
-    // Show loading
     const btn = document.getElementById('btn-finalize');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Gerando relatório...';
 
     try {
       // Gerar PDF real (blob base64) via jsPDF + html2canvas
@@ -429,37 +466,95 @@ UTE_PE3.App = {
       data.pdf_base64 = pdfBase64;
       data.pdf_filename = filename;
 
-      // Try to send to n8n webhook (inclui o PDF)
+      // Enviar ao n8n (inclui o PDF)
       btn.innerHTML = '<span class="spinner"></span> Enviando...';
-      const sent = await this.sendToWebhook(data);
+      const result = await this.sendToWebhook(data);
 
-      // Update status
-      document.getElementById('status').value = 'Finalizado';
-      this.syncStatusButtons('Finalizado');
-      data.status = 'Finalizado';
+      // Guarda o relatório como rascunho para edição futura
+      data.status = result.ok ? 'Enviado' : 'Finalizado';
+      this.syncStatusButtons(data.status === 'Enviado' ? 'Finalizado' : data.status);
+      try { await UTE_PE3.Offline.saveDraft(data); } catch (e) { /* IndexedDB indisponível */ }
 
-      if (sent) {
-        UTE_PE3.UI.toast('OS finalizada e enviada!', 'success');
+      if (result.ok) {
+        UTE_PE3.UI.toast('✅ Relatório gerado e enviado!', 'success');
+      } else if (result.error) {
+        UTE_PE3.UI.toast(`Falha no envio (${result.error}) — salvo para reenvio automático`, 'error');
       } else {
-        // Offline: save to IndexedDB for later sync
-        await UTE_PE3.Offline.saveDraft(data);
-        UTE_PE3.UI.toast('Salvo offline — será enviado quando houver conexão', 'info');
+        UTE_PE3.UI.toast('Sem conexão — salvo para envio automático', 'info');
       }
 
       // Download local do PDF gerado
       if (pdfBase64) UTE_PE3.Report.downloadBase64(pdfBase64, filename);
 
-      // Save autocomplete values
+      // Memoriza valores para autocomplete
       this.addToAutocomplete('local', data.local);
       (data.supervisores || []).forEach((s) => this.addToAutocomplete('supervisor', s));
-
-      // Save to localStorage autocomplete
       this.saveAutocompleteCache();
+
+      this.loadDrafts();
+
+      // Sucesso: limpa o formulário para um novo relatório
+      if (result.ok) this.resetForm();
     } catch (e) {
       UTE_PE3.UI.toast('Erro ao finalizar: ' + e.message, 'error');
     } finally {
       btn.disabled = false;
       btn.innerHTML = '✅ Finalizar';
+    }
+  },
+
+  /** Limpa todas as entradas para um novo relatório */
+  resetForm() {
+    ['pts', 'descricao', 'local', 'horimetro', 'descricao_detalhada', 'descricao_ia',
+     'observacoes', 'os_number', 'tecnico', 'supervisor', 'hora_inicial', 'hora_final'].forEach((f) => {
+      const el = document.getElementById(f);
+      if (el) el.value = '';
+    });
+    UTE_PE3.state.os_numbers = [];
+    UTE_PE3.state.tecnicos = [];
+    UTE_PE3.state.supervisores = [];
+    this.renderOS();
+    this.renderTecnicos();
+    this.renderSupervisores();
+    UTE_PE3.Camera.photos = [];
+    UTE_PE3.Camera.renderPhotos();
+    UTE_PE3.Camera.ptsPhoto = null;
+    UTE_PE3.Camera.renderPTSPhoto();
+    UTE_PE3.Signature.clearAll();
+    this.setDefaultDate();
+    this.syncStatusButtons('Aberto');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  },
+
+  // ─── IA: revisar Descrição Detalhada ──────
+
+  async aiReview() {
+    const texto = document.getElementById('descricao_detalhada').value.trim();
+    if (texto.length < 10) {
+      UTE_PE3.UI.toast('Escreva a Descrição Detalhada primeiro (mín. 10 caracteres)', 'error');
+      return;
+    }
+    const btn = document.getElementById('btn-ai');
+    const prev = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Revisando...';
+    try {
+      const r = await fetch(`${this.WEBHOOK_BASE}/ute-pe3-ai`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto }),
+        signal: AbortSignal.timeout(60000)
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      if (!j.texto) throw new Error('resposta vazia da IA');
+      document.getElementById('descricao_ia').value = j.texto;
+      UTE_PE3.UI.toast('Texto revisado pela IA — edite se necessário', 'success');
+    } catch (e) {
+      UTE_PE3.UI.toast('Falha na revisão IA: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = prev;
     }
   },
 
@@ -479,8 +574,10 @@ UTE_PE3.App = {
       hora_final: document.getElementById('hora_final').value.trim(),
       horimetro: document.getElementById('horimetro').value.trim(),
       descricao_detalhada: document.getElementById('descricao_detalhada').value.trim(),
+      descricao_ia: document.getElementById('descricao_ia').value.trim(),
       observacoes: document.getElementById('observacoes').value.trim(),
       assinatura: UTE_PE3.Signature.getData(),
+      assinaturas: UTE_PE3.Signature.getAll(),
       fotos: [...UTE_PE3.Camera.photos],
       foto_pts: UTE_PE3.Camera.ptsPhoto,
     };
@@ -489,8 +586,6 @@ UTE_PE3.App = {
   // ─── Webhook (n8n) ────────────────────────
 
   async sendToWebhook(data) {
-    const webhookUrl = 'https://servidor-203.tail43f430.ts.net/webhook/ute-pe3-os';
-
     const payload = {
       os_numbers: data.os_numbers,
       pts: data.pts,
@@ -504,8 +599,10 @@ UTE_PE3.App = {
       hora_final: data.hora_final,
       horimetro: data.horimetro,
       descricao_detalhada: data.descricao_detalhada,
+      descricao_ia: data.descricao_ia || null,
       observacoes: data.observacoes,
       assinatura: data.assinatura,
+      assinaturas: data.assinaturas || [],
       fotos: data.fotos,
       foto_pts: data.foto_pts,
       pdf_base64: data.pdf_base64 || null,
@@ -513,18 +610,18 @@ UTE_PE3.App = {
     };
 
     try {
-      const response = await fetch(webhookUrl, {
+      const response = await fetch(`${this.WEBHOOK_BASE}/ute-pe3-os`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(30000)
+        signal: AbortSignal.timeout(120000)
       });
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return true;
+      if (!response.ok) return { ok: false, error: `HTTP ${response.status}` };
+      return { ok: true };
     } catch (e) {
       console.warn('Webhook unreachable (offline?):', e.message);
-      return false;
+      return { ok: false };
     }
   },
 
@@ -553,7 +650,7 @@ UTE_PE3.App = {
 
       for (const draft of pending) {
         const sent = await this.sendToWebhook(draft);
-        if (sent) await UTE_PE3.Offline.deleteDraft(draft.id);
+        if (sent.ok) await UTE_PE3.Offline.deleteDraft(draft.id);
       }
 
       if (pending.length > 0) {
