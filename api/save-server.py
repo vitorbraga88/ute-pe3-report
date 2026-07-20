@@ -41,6 +41,25 @@ DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 RELATORIOS_DIR.mkdir(parents=True, exist_ok=True)
 
 PUBLIC_BASE_URL = "https://servidor-203.tail43f430.ts.net/ute-pe3-report"
+
+
+def _load_dotenv(path):
+    """Minimal .env loader (no third-party deps): sets os.environ for keys
+    not already set, so an explicit `export` still takes precedence."""
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
+_load_dotenv(BASE_DIR / ".env")
+_load_dotenv(BASE_DIR / "api" / ".env")
 DEFAULT_SENDER = os.environ.get("SMTP_DEFAULT_SENDER", "vitor.braga@ht-hidrotermica.com.br")
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
@@ -86,7 +105,7 @@ CREATE TABLE IF NOT EXISTS assinaturas (
   updated_at TEXT DEFAULT (datetime('now','localtime'))
 );
 """
-SAFE_FILENAME = re.compile(r"^[A-Za-z0-9._-]+\.pdf$")
+SAFE_FILENAME = re.compile(r"^[^/\\\x00-\x1f]+\.pdf$", re.IGNORECASE)
 
 
 def init_db():
@@ -147,7 +166,8 @@ def insert_os(payload):
 
 
 def save_pdf(filename, pdf_base64):
-    if not SAFE_FILENAME.match(filename or ""):
+    filename = os.path.basename((filename or "").strip())
+    if not SAFE_FILENAME.match(filename):
         raise ValueError("filename invalido (esperado *.pdf sem caminho)")
     if not pdf_base64:
         raise ValueError("pdf_base64 vazio")
@@ -261,7 +281,7 @@ def send_email(to_addr, subject, body_text, pdf_base64, pdf_filename):
     if not SMTP_PASS:
         raise RuntimeError("SMTP_PASS nao configurado no servidor")
     msg = MIMEMultipart()
-    msg["From"] = SMTP_USER
+    msg["From"] = DEFAULT_SENDER
     msg["To"] = to_addr
     msg["Subject"] = subject
     msg.attach(MIMEText(body_text, "plain", "utf-8"))
