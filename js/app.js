@@ -726,6 +726,18 @@ UTE_PE3.App = {
       const pending = drafts.filter((d) => d.status === 'Finalizado');
 
       for (const draft of pending) {
+        // Rascunhos salvos offline nunca tiveram o PDF gerado (isso só acontece
+        // em finalize()); sem isso o backend rejeita com "pdf_base64 vazio".
+        // Gera agora, com os mesmos dados do rascunho, antes de reenviar.
+        if (!draft.pdf_base64) {
+          try {
+            const filename = draft.pdf_filename || this.buildPdfFilename(draft);
+            draft.pdf_base64 = await UTE_PE3.Report.generatePDFBlob(draft);
+            draft.pdf_filename = filename;
+          } catch (e) {
+            continue; // não foi possível gerar o PDF agora; tenta na próxima reconexão
+          }
+        }
         const sent = await this.sendToWebhook(draft);
         if (sent.ok) await UTE_PE3.Offline.deleteDraft(draft.id);
       }
