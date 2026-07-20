@@ -55,7 +55,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'deepseek/deepseek-chat', messages: [ { role: 'system', content: 'Você é um engenheiro de manutenção industrial. Reescreva a descrição do serviço em português técnico, claro e gramaticalmente correto, adicionando detalhamento técnico do serviço executado (equipamento, procedimento e condição encontrada). Responda somente com o texto reescrito em português, sem títulos nem comentários.' }, { role: 'user', content: $json.descricao_detalhada || $json.descricao } ], max_tokens: 700, temperature: 0.3 }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek/deepseek-chat', messages: [ { role: 'system', content: 'Você é um engenheiro de manutenção industrial. Analise a descrição do serviço e responda SOMENTE com um objeto JSON válido (sem markdown, sem comentários) com duas chaves: \"resumo\" = reescrita técnica em português, clara e gramaticalmente correta, com detalhamento do serviço executado (equipamento, procedimento e condição encontrada). Não invente dados ausentes na descrição original (modelos, séries, medições). \"recomendacoes\" = array de 3 a 5 recomendações técnicas pertinentes (próximas inspeções, preventivas, peças a monitorar), cada item com uma frase curta.' }, { role: 'user', content: $json.descricao_detalhada || $json.descricao } ], max_tokens: 900, temperature: 0.3, response_format: { type: 'json_object' } }) }}",
         "options": {
           "timeout": 30000
         }
@@ -71,7 +71,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const prev = $('Parse & Validate').first().json;\nconst llmResponse = $input.first().json;\nconst descResumida = llmResponse?.choices?.[0]?.message?.content || prev.descricao_detalhada || prev.descricao;\n\nreturn { ...prev, descricao_resumida: (descResumida || '').trim() };"
+      "jsCode": "const prev = $('Parse & Validate').first().json;\nconst resp = $input.first().json;\nconst content = resp?.choices?.[0]?.message?.content || '';\nlet resumo = prev.descricao_detalhada || prev.descricao;\nlet recomendacoes = [];\ntry {\n  const p = JSON.parse(content);\n  if (p.resumo) resumo = p.resumo;\n  if (Array.isArray(p.recomendacoes)) recomendacoes = p.recomendacoes.filter((x) => typeof x === 'string' && x.trim());\n} catch (e) {\n  if (content.trim()) resumo = content.trim();\n}\nreturn { ...prev, descricao_resumida: resumo.trim(), recomendacoes };"
       },
       "id": "extract-summary",
       "name": "Extract Summary",
@@ -108,7 +108,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const j = $input.first().json;\nconst texto = (j.descricao_ia || j.descricao_resumida || j.descricao_detalhada || j.descricao || '').trim();\nreturn { ...j, descricao_resumida: texto };"
+        "jsCode": "const j = $input.first().json;\nconst texto = (j.descricao_ia || j.descricao_resumida || j.descricao_detalhada || j.descricao || '').trim();\nconst recs = Array.isArray(j.recomendacoes) ? j.recomendacoes : [];\nreturn { ...j, descricao_resumida: texto, recomendacoes: recs };"
       },
       "id": "resumo-final",
       "name": "Resumo Final",

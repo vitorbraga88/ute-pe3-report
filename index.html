@@ -3,13 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#1e40af">
+  
   <meta name="description" content="Sistema de Gestao de Ordens de Servico e PTS - UTE Pernambuco III">
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="assets/icons/favicon.ico" type="image/x-icon">
-  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  
+  
   <title>UTE-PE3 — Relatório de OS</title>
   <link rel="stylesheet" href="css/styles.css">
+
+<link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="152x152" href="assets/apple-touch-icon-152x152.png">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
+<meta name="msapplication-TileImage" content="assets/icon-192.png">
+<meta name="msapplication-TileColor" content="#1e3a5f">
+<meta name="theme-color" content="#1e3a5f">
 </head>
 <body>
 
@@ -18,11 +27,14 @@
 
   <!-- Header -->
   <header class="header">
-    <span class="logo-badge"><img src="assets/logo-ute.png" alt="UTE PE3"></span>
-    <div>
-      <h1>UTE Pernambuco III</h1>
-      <div class="header-sub">Relatório de Ordem de Serviço</div>
+    <div class="header-left">
+      <span class="logo-badge"><img src="assets/logo-ute.png" alt="UTE PE3"></span>
+      <div>
+        <h1>UTE Pernambuco III</h1>
+        <div class="header-sub">Relatório de Ordem de Serviço</div>
+      </div>
     </div>
+    <span class="header-right"><img src="assets/logo_report.png" alt="Report"></span>
   </header>
 
   <main class="container">
@@ -180,6 +192,13 @@
             <button type="button" class="btn btn-secondary btn-sm" id="btn-ai" onclick="UTE_PE3.App.aiReview()">✨ Revisar com IA</button>
           </div>
           <div class="error-msg" id="error-descricao_ia"></div>
+        </div>
+
+        <!-- 12c — Recomendações Técnicas (IA) -->
+        <div class="form-group">
+          <label for="recomendacoes">Recomendações Técnicas (IA) — uma por linha</label>
+          <textarea id="recomendacoes" name="recomendacoes" rows="4"
+                    placeholder="Toque em ✨ Revisar com IA para gerar as recomendações. Edite, remova ou acrescente linhas antes de finalizar."></textarea>
         </div>
 
         <!-- 13 — Observações -->

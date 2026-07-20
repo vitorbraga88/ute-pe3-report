@@ -36,130 +36,253 @@ UTE_PE3.Report = {
   },
 
   buildHTML(data) {
-    const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-    const osList = esc((data.os_numbers || []).join(', '));
-    const supervisorList = esc((data.supervisores || []).join(', '));
-    const dataFormatada = esc(this.formatDate(data.data));
-    const logoSrc = new URL('assets/logo-ute.png', window.location.href).href;
-
-    // Relatório fotográfico: 2 fotos por linha, tamanho padronizado, descrição
-    // embaixo. Paginado (6 por página = 3 linhas) para nunca cortar uma foto.
+    const esc = (s) => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const osList = esc((data.os_numbers || []).join(' · ') || '—');
+    const dataFmt = esc(this.formatDate(data.data));
+    const status = data.status || 'Aberto';
+    const localTag = esc(data.local || '—');
+    const pts = esc(data.pts || '—');
+    const hIni = esc(data.hora_inicial || '—');
+    const hFim = esc(data.hora_final || '—');
+    const horim = esc(data.horimetro || '—');
+    const supervisores = esc((data.supervisores || []).join(', ') || '—');
+    const tecnicos = data.tecnicos || [];
+    const resumo = esc(data.descricao || '');
+    const texto = esc(data.descricao_ia || data.descricao_resumida || data.descricao_detalhada || '');
+    const recomendacoes = Array.isArray(data.recomendacoes) ? data.recomendacoes.filter((r) => r && r.trim()) : [];
+    const observacoes = esc(data.observacoes || '');
     const fotos = data.fotos || [];
-    const PER_PAGE = 6;
-    let photoPages = '';
-    for (let i = 0; i < fotos.length; i += PER_PAGE) {
-      const boxes = fotos.slice(i, i + PER_PAGE).map((f, j) => `
-        <div class="photo-box">
-          <div class="photo-frame"><img src="${f.base64}" alt="Foto ${i + j + 1}"></div>
-          <div class="photo-caption">${esc(f.descricao) || 'Foto ' + (i + j + 1)}</div>
+    const fotoPts = data.foto_pts;
+    const assinaturas = (data.assinaturas && data.assinaturas.length)
+      ? data.assinaturas
+      : [{ nome: data.supervisor || '', img: data.assinatura }];
+    const logoSrc = new URL('assets/logo-ute.png', window.location.href).href;
+    const logoReportSrc = new URL('assets/logo_report.png', window.location.href).href;
+
+    // Assinaturas: garante 2 slots (esquerda = principal, direita = técnico/2ª)
+    const sig1 = assinaturas[0] || { nome: '', img: null };
+    const sig2 = assinaturas[1] || { nome: '', img: null };
+    const sigHTML = `
+      <section class="sec">
+        <div class="sec-h"><h2>Assinaturas</h2></div>
+        <div class="assin">
+          <div class="sig">
+            <div class="pad">${sig1.img ? `<img src="${sig1.img}" alt="Assinatura">` : ''}</div>
+            <div class="ln"></div>
+            <div class="nm">${esc(sig1.nome) || '&nbsp;'}</div>
+          </div>
+          <div class="sig">
+            <div class="pad">${sig2.img ? `<img src="${sig2.img}" alt="Assinatura">` : ''}</div>
+            <div class="ln"></div>
+            <div class="nm">${esc(sig2.nome) || 'Técnico'}</div>
+          </div>
         </div>
-      `).join('');
-      photoPages += `
-  <div class="page">
-    <div class="header">
-      <img src="${logoSrc}" alt="UTE PE3" crossorigin="anonymous">
-      <div><h1>Relatório Fotográfico</h1><div class="sub">OS ${osList} — ${dataFormatada}</div></div>
-    </div>
-    <div class="photos-grid">${boxes}</div>
-  </div>`;
+      </section>`;
+
+    // Paginação de fotos: 4 por página (2x2); assinaturas vão na última página de fotos
+    const PER = 4;
+    const chunks = [];
+    if (fotos.length === 0) {
+      chunks.push([]);
+    } else {
+      for (let i = 0; i < fotos.length; i += PER) chunks.push(fotos.slice(i, i + PER));
     }
+    const numFotoPages = chunks.length;
+    const totalPages = 1 + numFotoPages + (fotoPts ? 1 : 0);
+
+    const fotoPagesHTML = chunks.map((chunk, idx) => {
+      const isLast = idx === chunks.length - 1;
+      const boxes = chunk.length === 0
+        ? `<p style="color:var(--muted);font-size:10pt;padding:4mm 0">Nenhum registro fotográfico.</p>`
+        : chunk.map((f, j) => `
+          <figure class="foto">
+            <div class="ph"><img src="${f.base64}" alt="${esc(f.descricao || 'Foto')}"></div>
+            <figcaption><span class="fn">${String(idx * PER + j + 1).padStart(2, '0')}</span>${esc(f.descricao || '')}</figcaption>
+          </figure>`).join('');
+      return `
+  <section class="page">
+    <header class="band band--slim">
+      <div class="logo-box"><img src="${logoSrc}" alt="UTE PE3"></div>
+      <div class="band-center">
+        <span class="kicker">OS ${osList} — ${dataFmt}</span>
+        <h1>Relatório Fotográfico</h1>
+        <div class="count mono" style="margin-top:1.6mm">${String(fotos.length).padStart(2, '0')} registros</div>
+      </div>
+      <div class="logo-box"><img src="${logoReportSrc}" alt="Relatório"></div>
+    </header>
+    <div class="content">
+      <div class="fotos">${boxes}</div>
+      ${isLast ? sigHTML : ''}
+    </div>
+    <footer class="foot">
+      <span>UTE Pernambuco III — Relatório de Ordem de Serviço</span>
+      <span class="mono">OS ${osList}</span>
+      <span>Página ${1 + idx + 1} de ${totalPages}</span>
+    </footer>
+  </section>`;
+    }).join('');
+
+    const ptsPageHTML = fotoPts ? `
+  <section class="page page--fixa">
+    <header class="band band--slim">
+      <div class="logo-box"><img src="${logoSrc}" alt="UTE PE3"></div>
+      <div class="band-center">
+        <span class="kicker">OS ${osList} — ${dataFmt}</span>
+        <h1>Permissão de Trabalho</h1>
+        <div class="os-tag os-tag--sm"><span class="lbl">PTS Nº</span><span class="val mono">${pts}</span></div>
+      </div>
+      <div class="logo-box"><img src="${logoReportSrc}" alt="Relatório"></div>
+    </header>
+    <div class="content">
+      <div class="pts-frame"><img src="${fotoPts}" alt="PTS ${pts}"></div>
+      <p class="pts-cap">Anexo — registro da Permissão de Trabalho de Segurança Nº ${pts}</p>
+    </div>
+    <footer class="foot">
+      <span>UTE Pernambuco III — Relatório de Ordem de Serviço</span>
+      <span class="mono">OS ${osList}</span>
+      <span>Página ${totalPages} de ${totalPages}</span>
+    </footer>
+  </section>` : '';
+
+    const tecnicosChips = tecnicos.length
+      ? tecnicos.map((t) => `<span class="chip">${esc(t)}</span>`).join('')
+      : '<span class="chip">—</span>';
+
+    const recomendacoesHTML = recomendacoes.length ? `
+      <section class="sec">
+        <div class="sec-h"><h2>Recomendações Técnicas</h2></div>
+        <ul class="recomendacoes" style="list-style:none;padding:0">
+          ${recomendacoes.map((r) => `
+          <li style="display:flex;gap:3mm;align-items:flex-start;padding:2mm 0;border-bottom:1px solid var(--line)">
+            <span style="color:var(--lime);font-weight:700;flex-shrink:0">→</span>
+            <span style="font-size:9.5pt;line-height:1.5">${esc(r)}</span>
+          </li>`).join('')}
+        </ul>
+      </section>` : '';
+
+    const observacoesHTML = observacoes ? `
+      <section class="sec">
+        <div class="sec-h"><h2>Observações</h2></div>
+        <p class="texto">${observacoes}</p>
+      </section>` : '';
 
     return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>OS_${osList.replace(/, /g, '-')}_${dataFormatada.replace(/\//g, '-')}</title>
-  <style>
-    @page { margin: 12mm; size: A4; }
-    body { font-family: 'Inter', Arial, sans-serif; color: #1f2937; font-size: 11px; line-height: 1.5; }
-    .page { page-break-after: always; width: 100%; box-sizing: border-box; background: #fff; padding: 2px; }
-    .page:last-child { page-break-after: auto; }
-    .header { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #1e40af; padding-bottom: 12px; margin-bottom: 16px; }
-    .header img { width: 50px; height: 50px; object-fit: contain; background: #fff; border-radius: 8px; padding: 4px; }
-    .header h1 { font-size: 16px; color: #1e40af; margin: 0; }
-    .header .sub { font-size: 10px; color: #6b7280; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .field { margin-bottom: 10px; }
-    .field label { font-size: 8px; color: #6b7280; text-transform: uppercase; font-weight: 600; display: block; }
-    .field .value { font-size: 11px; font-weight: 500; }
-    .section-title { font-size: 13px; color: #1e40af; font-weight: 700; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin: 16px 0 10px; }
-    .signature-img { max-width: 250px; max-height: 80px; height: auto; border: 1px solid #ddd; border-radius: 4px; background: #fff; }
-    .sig-grid { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 6px; }
-    .sig-box { text-align: center; }
-    .sig-name { font-size: 10px; color: #374151; border-top: 1px solid #9ca3af; margin-top: 4px; padding-top: 3px; min-width: 180px; }
-    .photos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .photo-box { border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; background: #fff; }
-    .photo-frame { width: 100%; height: 185px; background: #f3f4f6; }
-    .photo-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .photo-caption { padding: 7px 9px; font-size: 10px; color: #374151; border-top: 1px solid #f3f4f6; min-height: 15px; }
-    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 9px; font-weight: 600; }
-    .status-Finalizado { background: #dcfce7; color: #166534; }
-    @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    }
-  </style>
+<meta charset="UTF-8">
+<title>OS ${osList} — Relatório de Ordem de Serviço</title>
+<style>
+  :root{
+    --navy:#0B1D2E; --navy2:#143252; --lime:#A6CE26; --lime-ink:#5C7710;
+    --ink:#1C2733; --muted:#5F6E7C; --line:#DFE5EA; --soft:#F4F7F9; --bg:#E7EBEE;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{background:var(--bg);font-family:'IBM Plex Sans',-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:var(--ink);font-size:10pt;line-height:1.55}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,Consolas,monospace}
+  img{display:block}
+  .page{width:210mm;min-height:297mm;background:#fff;margin:8mm auto;box-shadow:0 3px 26px rgba(11,29,46,.16);display:flex;flex-direction:column;overflow:hidden}
+  .page--fixa{height:297mm}
+  .band{background:linear-gradient(115deg,var(--navy) 0%,var(--navy2) 100%);color:#fff;padding:8mm 14mm;display:flex;align-items:center;gap:6mm;border-bottom:1.8mm solid var(--lime)}
+  .band--slim{padding:5mm 14mm;border-bottom-width:1.2mm;gap:4.5mm}
+  .brand{height:21mm;width:21mm;object-fit:contain}
+  .band--slim .brand{height:13mm;width:13mm}
+  .logo-box{background:#fff;border-radius:2mm;padding:1.5mm;height:23mm;width:23mm;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .logo-box img{max-height:100%;max-width:100%;object-fit:contain}
+  .band--slim .logo-box{height:14mm;width:14mm}
+  .band-center{flex:1;min-width:0;text-align:center}
+  .band-center .os-tag{margin-top:2.2mm;display:inline-block}
+  .kicker{display:block;font-size:7.2pt;font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:var(--lime);margin-bottom:1.4mm}
+  .band h1{font-family:'Saira','IBM Plex Sans',sans-serif;font-size:16pt;font-weight:700;letter-spacing:.015em;line-height:1.12}
+  .band--slim h1{font-size:12.5pt}
+  .band .right{margin-left:auto}
+  .count{font-size:8.5pt;color:#C7D3DD;letter-spacing:.08em}
+  .os-tag{border:1px solid rgba(166,206,38,.55);background:rgba(166,206,38,.10);border-radius:2mm;padding:2.4mm 4mm;text-align:center}
+  .os-tag .lbl{display:block;font-size:6.6pt;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--lime);margin-bottom:.8mm}
+  .os-tag .val{font-size:12pt;font-weight:600;color:#fff;white-space:nowrap}
+  .os-tag--sm{padding:1.8mm 3.4mm}
+  .os-tag--sm .val{font-size:10.5pt}
+  .content{padding:8mm 14mm 0;flex:1;display:flex;flex-direction:column;min-height:0}
+  .meta{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:2.5mm;overflow:hidden}
+  .cell{padding:3.2mm 4mm;border-bottom:1px solid var(--line);border-right:1px solid var(--line)}
+  .cell:nth-child(4n){border-right:0}
+  .cell--wide{grid-column:1/-1;border-right:0;border-bottom:0}
+  .lbl{display:block;font-size:6.6pt;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:1.1mm}
+  .val{font-size:10.5pt;font-weight:600;color:var(--navy)}
+  .pill{display:inline-flex;align-items:center;gap:1.8mm;background:var(--navy);color:#fff;font-size:7.8pt;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:1.3mm 3.4mm;border-radius:99px}
+  .pill i{width:2.1mm;height:2.1mm;border-radius:50%;background:var(--lime)}
+  .chips{display:flex;flex-wrap:wrap;gap:2mm;margin-top:.4mm}
+  .chip{background:var(--soft);border:1px solid var(--line);border-radius:99px;padding:1.1mm 3.6mm;font-size:9pt;font-weight:500}
+  .sec{margin-top:7mm}
+  .sec-h{display:flex;align-items:center;gap:3mm;border-bottom:1px solid var(--line);padding-bottom:2.2mm;margin-bottom:3.8mm}
+  .sec-h::before{content:'';width:1.7mm;height:4.4mm;background:var(--lime);border-radius:.6mm}
+  .sec-h h2{font-family:'Saira','IBM Plex Sans',sans-serif;font-size:10.5pt;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--navy)}
+  .resumo{font-size:11.5pt;font-weight:600;color:var(--navy);margin-bottom:2.2mm}
+  .texto{line-height:1.65;max-width:180mm;white-space:pre-wrap}
+  .foot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:4mm;border-top:1px solid var(--line);padding:3.4mm 14mm 6.5mm;font-size:7.2pt;color:var(--muted);letter-spacing:.05em}
+  .fotos{display:grid;grid-template-columns:1fr 1fr;gap:5mm}
+  .foto{border:1px solid var(--line);border-radius:2.5mm;overflow:hidden;background:#fff;break-inside:avoid}
+  .foto .ph{aspect-ratio:4/3;background:var(--soft)}
+  .foto .ph img{width:100%;height:100%;object-fit:cover}
+  .foto figcaption{display:flex;align-items:center;gap:2.6mm;border-top:1px solid var(--line);background:var(--soft);padding:2.2mm 3.2mm;font-size:8.8pt;font-weight:500}
+  .fn{font-family:'IBM Plex Mono',monospace;font-size:7.6pt;font-weight:600;color:var(--lime-ink);background:#EEF5D4;border:1px solid #D4E39A;border-radius:1.2mm;padding:.3mm 1.8mm}
+  .assin{display:grid;grid-template-columns:1fr 1fr;gap:10mm;padding:0 6mm}
+  .sig .pad{height:24mm;display:flex;align-items:flex-end;justify-content:center;padding-bottom:1mm}
+  .sig .pad img{max-height:22mm;max-width:75%;width:auto;object-fit:contain}
+  .sig .ln{border-top:1px solid #9AA7B2;margin:0 4mm 2mm}
+  .sig .nm{text-align:center;font-size:10pt;font-weight:600;color:var(--navy)}
+  .pts-frame{flex:1;min-height:0;max-height:224mm;border:1px solid var(--line);border-radius:2.5mm;background:var(--soft);display:flex;align-items:center;justify-content:center;padding:5mm;overflow:hidden}
+  .pts-frame img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;border-radius:1.5mm;box-shadow:0 1px 8px rgba(11,29,46,.18)}
+  .pts-cap{text-align:center;font-size:8pt;color:var(--muted);margin:3mm 0 0}
+  .recomendacoes li:last-child{border-bottom:none}
+</style>
 </head>
 <body>
-  <!-- Page 1: Dados da OS -->
-  <div class="page" id="pdf-page-1">
-    <div class="header">
-      <img src="${logoSrc}" alt="UTE PE3" crossorigin="anonymous">
-      <div>
-        <h1>UTE Pernambuco III</h1>
-        <div class="sub">Relatório de Ordem de Serviço</div>
-      </div>
+<section class="page">
+  <header class="band">
+    <div class="logo-box"><img src="${logoSrc}" alt="UTE PE3"></div>
+    <div class="band-center">
+      <span class="kicker">UTE Pernambuco III · Manutenção</span>
+      <h1>Relatório de Ordem de Serviço</h1>
+      <div class="os-tag"><span class="lbl">OS Nº</span><span class="val mono">${osList}</span></div>
+    </div>
+    <div class="logo-box"><img src="${logoReportSrc}" alt="Relatório"></div>
+  </header>
+  <div class="content">
+    <div class="meta">
+      <div class="cell"><span class="lbl">Data</span><span class="val mono">${dataFmt}</span></div>
+      <div class="cell"><span class="lbl">Status</span><span class="pill"><i></i>${status}</span></div>
+      <div class="cell"><span class="lbl">Local / TAG</span><span class="val">${localTag}</span></div>
+      <div class="cell"><span class="lbl">PTS Nº</span><span class="val mono">${pts}</span></div>
+      <div class="cell"><span class="lbl">Horário inicial</span><span class="val mono">${hIni}</span></div>
+      <div class="cell"><span class="lbl">Horário final</span><span class="val mono">${hFim}</span></div>
+      <div class="cell"><span class="lbl">Horímetro</span><span class="val mono">${horim}</span></div>
+      <div class="cell"><span class="lbl">Supervisor</span><span class="val">${supervisores}</span></div>
+      <div class="cell cell--wide"><span class="lbl">Técnicos executantes</span><div class="chips">${tecnicosChips}</div></div>
     </div>
 
-    <div class="grid">
-      <div class="field"><label>OS Nº</label><div class="value">${osList || '—'}</div></div>
-      <div class="field"><label>PTS Nº</label><div class="value">${esc(data.pts)}</div></div>
-      <div class="field"><label>Data</label><div class="value">${dataFormatada}</div></div>
-      <div class="field"><label>Status</label><div class="value"><span class="status-badge status-${esc(data.status)}">${esc(data.status)}</span></div></div>
-      <div class="field"><label>Local / TAG</label><div class="value">${esc(data.local)}</div></div>
-      <div class="field"><label>Supervisor(es)</label><div class="value">${supervisorList || '—'}</div></div>
-      <div class="field"><label>Horário Inicial</label><div class="value">${esc(data.hora_inicial)}</div></div>
-      <div class="field"><label>Horário Final</label><div class="value">${esc(data.hora_final)}</div></div>
-      <div class="field"><label>Horímetro</label><div class="value">${esc(data.horimetro) || '—'}</div></div>
-    </div>
+    <section class="sec">
+      <div class="sec-h"><h2>Descrição da Atividade</h2></div>
+      <p class="resumo">${resumo}</p>
+      <p class="texto">${texto}</p>
+    </section>
 
-    <div class="field" style="margin-top:8px">
-      <label>Técnicos</label>
-      <div class="value">${esc((data.tecnicos || []).join(', '))}</div>
-    </div>
-
-    <div class="section-title">Descrição</div>
-    <div class="field"><label>Resumo</label><div class="value">${esc(data.descricao)}</div></div>
-    ${(data.descricao_ia || data.descricao_resumida) ? `<div class="field"><label>Detalhamento Técnico (IA)</label><div class="value" style="white-space:pre-wrap">${esc(data.descricao_ia || data.descricao_resumida)}</div></div>` : ''}
-    <div class="field"><label>Descrição Detalhada</label><div class="value" style="white-space:pre-wrap">${esc(data.descricao_detalhada)}</div></div>
-
-    ${data.observacoes ? `<div class="field"><label>Observações</label><div class="value">${esc(data.observacoes)}</div></div>` : ''}
-
-    ${((data.assinaturas && data.assinaturas.length) || data.assinatura) ? `
-    <div class="section-title">Assinaturas</div>
-    <div class="sig-grid">
-      ${(data.assinaturas && data.assinaturas.length ? data.assinaturas : [{ nome: '', img: data.assinatura }]).map((a) => `
-      <div class="sig-box">
-        <img src="${a.img}" class="signature-img" alt="Assinatura">
-        <div class="sig-name">${esc(a.nome) || '&nbsp;'}</div>
-      </div>`).join('')}
-    </div>
-    ` : ''}
+    ${recomendacoesHTML}
+    ${observacoesHTML}
   </div>
+  <footer class="foot">
+    <span>UTE Pernambuco III — Relatório de Ordem de Serviço</span>
+    <span class="mono">OS ${osList}</span>
+    <span>Página 1 de ${totalPages}</span>
+  </footer>
+</section>
 
-  <!-- Páginas: Relatório Fotográfico -->
-  ${photoPages}
+<!-- ═══ PÁGINAS · RELATÓRIO FOTOGRÁFICO + ASSINATURAS ═══ -->
+${fotoPagesHTML}
 
-  <!-- Página: Permissão de Trabalho -->
-  ${data.foto_pts ? `
-  <div class="page" id="pdf-page-pts">
-    <div class="header">
-      <img src="${logoSrc}" alt="UTE PE3" crossorigin="anonymous">
-      <div><h1>Permissão de Trabalho — Anexo</h1><div class="sub">OS ${osList} — ${dataFormatada}</div></div>
-    </div>
-    <img src="${data.foto_pts}" style="max-width:100%;height:auto;border:1px solid #ddd;border-radius:4px" alt="PTS">
-  </div>
-  ` : ''}
+<!-- ═══ PÁGINA FINAL · ANEXO PTS ═══ -->
+${ptsPageHTML}
+
 </body>
 </html>`;
   },
@@ -223,17 +346,14 @@ UTE_PE3.Report = {
         // Nova página física para cada seção (exceto a primeira)
         if (i > 0) pdf.addPage();
 
-        // Se a seção for mais alta que uma A4, fatia em várias páginas
-        // para nunca truncar conteúdo (texto longo da IA ou fotos).
-        let position = 0;
-        let heightLeft = imgHeightMm;
-        pdf.addImage(imgData, 'JPEG', 0, position, pageWidthMm, imgHeightMm);
-        heightLeft -= pageHeightMm;
-        while (heightLeft > 0) {
-          position -= pageHeightMm;
-          pdf.addPage();
-          pdf.addImage(imgData, 'JPEG', 0, position, pageWidthMm, imgHeightMm);
-          heightLeft -= pageHeightMm;
+        // Uma página PDF por .page: se a seção ultrapassar A4, escala para caber
+        // (preserva aspecto, centraliza). Nunca gera página em branco.
+        if (imgHeightMm <= pageHeightMm) {
+          pdf.addImage(imgData, 'JPEG', 0, 0, pageWidthMm, imgHeightMm);
+        } else {
+          const scale = pageHeightMm / imgHeightMm;
+          const drawW = pageWidthMm * scale;
+          pdf.addImage(imgData, 'JPEG', (pageWidthMm - drawW) / 2, 0, drawW, pageHeightMm);
         }
       }
 

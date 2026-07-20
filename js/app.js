@@ -388,7 +388,7 @@ UTE_PE3.App = {
   populateForm(data) {
     const fields = ['pts', 'descricao', 'local', 'status',
                     'data', 'hora_inicial', 'hora_final', 'horimetro',
-                    'descricao_detalhada', 'descricao_ia', 'observacoes'];
+                    'descricao_detalhada', 'descricao_ia', 'recomendacoes', 'observacoes'];
     fields.forEach((f) => {
       const el = document.getElementById(f);
       if (el && data[f] !== undefined) el.value = data[f] || '';
@@ -452,10 +452,17 @@ UTE_PE3.App = {
       UTE_PE3.UI.toast('Assinatura 1 é obrigatória', 'error');
       return;
     }
+    let btn = document.getElementById('btn-finalize');
+
+    // Garante Detalhamento Técnico + Recomendações no PDF: se o usuário não revisou,
+    // roda a IA automaticamente antes de gerar o PDF.
+    if (!document.getElementById('descricao_ia').value.trim()
+        && document.getElementById('descricao_detalhada').value.trim().length >= 10) {
+      await this.aiReview();
+    }
 
     const data = this.collectFormData();
 
-    const btn = document.getElementById('btn-finalize');
     btn.disabled = true;
 
     try {
@@ -506,7 +513,7 @@ UTE_PE3.App = {
   /** Limpa todas as entradas para um novo relatório */
   resetForm() {
     ['pts', 'descricao', 'local', 'horimetro', 'descricao_detalhada', 'descricao_ia',
-     'observacoes', 'os_number', 'tecnico', 'supervisor', 'hora_inicial', 'hora_final'].forEach((f) => {
+     'recomendacoes', 'observacoes', 'os_number', 'tecnico', 'supervisor', 'hora_inicial', 'hora_final'].forEach((f) => {
       const el = document.getElementById(f);
       if (el) el.value = '';
     });
@@ -547,11 +554,19 @@ UTE_PE3.App = {
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const j = await r.json();
-      if (!j.texto) throw new Error('resposta vazia da IA');
-      document.getElementById('descricao_ia').value = j.texto;
-      UTE_PE3.UI.toast('Texto revisado pela IA — edite se necessário', 'success');
+      // Contrato novo: { resumo, recomendacoes[] }
+      const resumo = j.resumo || j.texto || '';
+      const recs = Array.isArray(j.recomendacoes) ? j.recomendacoes : [];
+      if (!resumo) throw new Error('resposta vazia da IA');
+      document.getElementById('descricao_ia').value = resumo;
+      document.getElementById('recomendacoes').value = recs.join('\n');
+      UTE_PE3.UI.toast(recs.length
+        ? `IA gerou resumo + ${recs.length} recomendação(ões) — revise antes de finalizar`
+        : 'Texto revisado pela IA — edite se necessário', 'success');
+      return true;
     } catch (e) {
       UTE_PE3.UI.toast('Falha na revisão IA: ' + e.message, 'error');
+      return false;
     } finally {
       btn.disabled = false;
       btn.innerHTML = prev;
@@ -568,6 +583,8 @@ UTE_PE3.App = {
       local: document.getElementById('local').value.trim(),
       status: document.getElementById('status').value,
       tecnicos: [...UTE_PE3.state.tecnicos],
+      recomendacoes: (document.getElementById('recomendacoes').value || '')
+        .split('\n').map((s) => s.trim()).filter(Boolean),
       supervisores: [...UTE_PE3.state.supervisores],
       data: document.getElementById('data').value.trim(),
       hora_inicial: document.getElementById('hora_inicial').value.trim(),
@@ -600,6 +617,7 @@ UTE_PE3.App = {
       horimetro: data.horimetro,
       descricao_detalhada: data.descricao_detalhada,
       descricao_ia: data.descricao_ia || null,
+      recomendacoes: data.recomendacoes || [],
       observacoes: data.observacoes,
       assinatura: data.assinatura,
       assinaturas: data.assinaturas || [],

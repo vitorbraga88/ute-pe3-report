@@ -29,7 +29,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'deepseek/deepseek-chat', messages: [ { role: 'system', content: 'Você é um engenheiro de manutenção industrial. Reescreva a descrição do serviço em português técnico, claro e gramaticalmente correto, adicionando detalhamento técnico do serviço executado (equipamento, procedimento e condição encontrada). Não invente dados que não estejam na descrição original (modelos, números de série, medições). Responda somente com o texto reescrito em português, sem títulos nem comentários.' }, { role: 'user', content: $json.body.texto || '' } ], max_tokens: 700, temperature: 0.3 }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek/deepseek-chat', messages: [ { role: 'system', content: 'Você é um engenheiro de manutenção industrial. Analise a descrição do serviço e responda SOMENTE com um objeto JSON válido (sem markdown, sem comentários) com duas chaves: \"resumo\" = reescrita técnica em português, clara e gramaticalmente correta, com detalhamento do serviço executado (equipamento, procedimento e condição encontrada). Não invente dados ausentes na descrição original (modelos, séries, medições). \"recomendacoes\" = array de 3 a 5 recomendações técnicas pertinentes (próximas inspeções, preventivas, peças a monitorar), cada item com uma frase curta.' }, { role: 'user', content: $json.body.texto || '' } ], max_tokens: 900, temperature: 0.3, response_format: { type: 'json_object' } }) }}",
         "options": { "timeout": 45000 }
       },
       "id": "ai-openrouter",
@@ -40,7 +40,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst texto = (r?.choices?.[0]?.message?.content || '').trim();\nif (!texto) throw new Error('IA sem resposta');\nreturn { texto };"
+      "jsCode": "const r = $input.first().json;\nconst content = (r?.choices?.[0]?.message?.content || '').trim();\nif (!content) throw new Error('IA sem resposta');\nlet out = { resumo: '', recomendacoes: [] };\ntry {\n  const p = JSON.parse(content);\n  out.resumo = (p.resumo || '').trim();\n  out.recomendacoes = Array.isArray(p.recomendacoes) ? p.recomendacoes.filter((x) => typeof x === 'string' && x.trim()) : [];\n} catch (e) { out.resumo = content; }\nif (!out.resumo) throw new Error('IA sem resposta');\nreturn out;"
       },
       "id": "ai-extract",
       "name": "Extract Texto",
@@ -51,7 +51,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ texto: $json.texto }) }}",
+        "responseBody": "={{ JSON.stringify({ resumo: $json.resumo, recomendacoes: $json.recomendacoes }) }}",
         "options": {}
       },
       "id": "ai-respond",

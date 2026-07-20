@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS ordens_servico (
   descricao_detalhada TEXT,
   descricao_resumida TEXT,
   observacoes TEXT,
+  recomendacoes TEXT,
   assinatura TEXT,
   fotos TEXT,
   foto_pts TEXT,
@@ -61,16 +62,18 @@ CREATE TABLE IF NOT EXISTS ordens_servico (
   created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 """
-
 SAFE_FILENAME = re.compile(r"^[A-Za-z0-9._-]+\.pdf$")
 
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     conn.execute(SCHEMA)
+    # migration: adiciona coluna recomendacoes em bases antigas
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(ordens_servico)")]
+    if "recomendacoes" not in cols:
+        conn.execute("ALTER TABLE ordens_servico ADD COLUMN recomendacoes TEXT")
     conn.commit()
     conn.close()
-
 
 def as_json_array(value):
     """Accept either a JSON array or a plain string/number; always store as JSON array text."""
@@ -87,9 +90,9 @@ def insert_os(payload):
         """INSERT INTO ordens_servico
            (os_numbers, pts, descricao, local, status, tecnicos, supervisores,
             data, hora_inicial, hora_final, horimetro, descricao_detalhada,
-            descricao_resumida, observacoes, assinatura, fotos, foto_pts,
+            descricao_resumida, recomendacoes, observacoes, assinatura, fotos, foto_pts,
             pdf_path, pdf_url)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             as_json_array(payload.get("os_numbers") or payload.get("os_number")),
             payload.get("pts", ""),
@@ -104,6 +107,7 @@ def insert_os(payload):
             str(payload.get("horimetro", "")),
             payload.get("descricao_detalhada", ""),
             payload.get("descricao_resumida", ""),
+            json.dumps(payload.get("recomendacoes", []), ensure_ascii=False),
             payload.get("observacoes", ""),
             payload.get("assinatura", ""),
             json.dumps(payload.get("fotos", []), ensure_ascii=False),
