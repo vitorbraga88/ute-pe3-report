@@ -55,7 +55,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'deepseek/deepseek-chat', messages: [ { role: 'system', content: 'Você é um engenheiro de manutenção industrial. Analise a descrição do serviço e responda SOMENTE com um objeto JSON válido (sem markdown, sem comentários) com duas chaves: \"resumo\" = reescrita técnica em português, clara e gramaticalmente correta, com detalhamento do serviço executado (equipamento, procedimento e condição encontrada). Não invente dados ausentes na descrição original (modelos, séries, medições). \"recomendacoes\" = array de 3 a 5 recomendações técnicas pertinentes (próximas inspeções, preventivas, peças a monitorar), cada item com uma frase curta.' }, { role: 'user', content: $json.descricao_detalhada || $json.descricao } ], max_tokens: 900, temperature: 0.3, response_format: { type: 'json_object' } }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek/deepseek-chat', messages: [ { role: 'system', content: 'Voce e um auxiliar de manutencao industrial. Responda APENAS com um JSON valido (sem markdown, sem cercas, sem texto fora) com duas chaves: \"resumo\" = reescreva a descricao em portugues simples, corrigindo SO ortografia e gramatica, em topicos curtos (uma ideia por linha comecando com - ), vocabulario simples de pessoa da manutencao, sem palavras rebuscadas, sem inventar dados ausentes. \"recomendacoes\" = array de 2 a 5 frases curtas e simples em portugues, so as que fizerem sentido, usando quando aplicavel: voltar ao equipamento em funcionamento para conferir vazamentos; com equipamento operando ler os medidores (pressao, vazao, temperatura); repor estoque das pecas usadas; anotar o horimetro para a proxima manutencao.' }, { role: 'user', content: $json.descricao_detalhada || $json.descricao } ], max_tokens: 700, temperature: 0.4 }) }}",
         "options": {
           "timeout": 30000
         }
@@ -71,7 +71,7 @@
     },
     {
       "parameters": {
-      "jsCode": "const prev = $('Parse & Validate').first().json;\nconst resp = $input.first().json;\nconst content = resp?.choices?.[0]?.message?.content || '';\nlet resumo = prev.descricao_detalhada || prev.descricao;\nlet recomendacoes = [];\ntry {\n  const p = JSON.parse(content);\n  if (p.resumo) resumo = p.resumo;\n  if (Array.isArray(p.recomendacoes)) recomendacoes = p.recomendacoes.filter((x) => typeof x === 'string' && x.trim());\n} catch (e) {\n  if (content.trim()) resumo = content.trim();\n}\nreturn { ...prev, descricao_resumida: resumo.trim(), recomendacoes };"
+      "jsCode": "const prev = $('Parse & Validate').first().json;\nconst resp = $input.first().json;\nlet content = (resp?.choices?.[0]?.message?.content || '').trim();\nlet resumo = prev.descricao_detalhada || prev.descricao;\nlet recomendacoes = [];\nif (content) {\n  let clean = content.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/,'').trim();\n  const m = clean.match(/\\{[\\s\\S]*\\}/);\n  if (m) clean = m[0];\n  try {\n    const p = JSON.parse(clean);\n    if (Array.isArray(p.resumo)) resumo = p.resumo.filter((x) => typeof x === 'string').map((x) => x.trim()).filter(Boolean).join('\\n');\n    else if (typeof p.resumo === 'string') resumo = p.resumo;\n    if (Array.isArray(p.recomendacoes)) recomendacoes = p.recomendacoes.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim());\n  } catch (e) { resumo = content; }\n}\nreturn { ...prev, descricao_resumida: resumo.trim(), recomendacoes };"
       },
       "id": "extract-summary",
       "name": "Extract Summary",
@@ -88,7 +88,7 @@
           "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
           "conditions": [
             {
-              "leftValue": "={{ $json.descricao_ia || '' }}",
+              "leftValue": "={{ $json.descricao_resumida || $json.descricao_ia || '' }}",
               "rightValue": "",
               "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
             }

@@ -24,6 +24,11 @@ UTE_PE3.App = {
     if (location.hostname.endsWith('.ts.net')) return '/webhook';
     return `http://${location.hostname}:5678/webhook`;
   },
+  /** Base do save-server (porta 8087), ciente da origem (mesma lógica do webhook). */
+  get SAVE_BASE() {
+    if (location.hostname.endsWith('.ts.net')) return '/ute-pe3-report/api';
+    return `http://${location.hostname}:8087`;
+  },
 
   /** Initialize the application */
   init() {
@@ -33,6 +38,7 @@ UTE_PE3.App = {
     this.initVoiceSupport();
     this.loadDrafts();
     this.monitorConnectivity();
+    this.syncSuggestionsFromDB();   // sincroniza técnicos/supervisores/remetentes do .db
 
     // Default supervisor
     UTE_PE3.state.supervisores = ['Vitor Braga'];
@@ -65,12 +71,20 @@ UTE_PE3.App = {
 
   addToAutocomplete(field, value) {
     if (!value || !value.trim()) return;
+    value = value.trim();
     const list = UTE_PE3.state.autocompleteCache[field];
     if (!list.includes(value)) {
       list.unshift(value);
       if (list.length > 30) list.pop();
     }
     this.saveAutocompleteCache();
+    // persiste no .db para sincronizar entre dispositivos (tecnico/supervisor)
+    if (field === 'tecnico' || field === 'supervisor') {
+      fetch(`${this.SAVE_BASE}/suggestion`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field, value })
+      }).catch(() => {});
+    }
   },
 
   onAutocompleteInput(field) {
@@ -113,6 +127,11 @@ UTE_PE3.App = {
     if (idx >= 0) list.splice(idx, 1);
     this.saveAutocompleteCache();
     this.onAutocompleteInput(field);
+    if (field === 'tecnico' || field === 'supervisor') {
+      fetch(`${this.SAVE_BASE}/suggestion?field=${encodeURIComponent(field)}&value=${encodeURIComponent(value)}`, {
+        method: 'DELETE'
+      }).catch(() => {});
+    }
     UTE_PE3.UI.toast('Sugestão removida', 'info');
   },
 
@@ -454,9 +473,10 @@ UTE_PE3.App = {
     }
     let btn = document.getElementById('btn-finalize');
 
-    // Garante Detalhamento Técnico + Recomendações no PDF: se o usuário não revisou,
-    // roda a IA automaticamente antes de gerar o PDF.
-    if (!document.getElementById('descricao_ia').value.trim()
+    // Auto-revisão IA só se o toggle de Descrição IA estiver LIGADO e o campo estiver vazio
+    const toggleDescIA = document.getElementById('usar_descricao_ia');
+    if (toggleDescIA && toggleDescIA.checked
+        && !document.getElementById('descricao_ia').value.trim()
         && document.getElementById('descricao_detalhada').value.trim().length >= 10) {
       await this.aiReview();
     }
@@ -467,8 +487,7 @@ UTE_PE3.App = {
 
     try {
       // Gerar PDF real (blob base64) via jsPDF + html2canvas
-      btn.innerHTML = '<span class="spinner"></span> Gerando PDF...';
-      const filename = `OS_${(data.os_numbers || []).join('-') || 'sem-numero'}_${(data.data || '').replace(/-/g, '')}.pdf`;
+      const filename = this.buildPdfFilename(data);
       const pdfBase64 = await UTE_PE3.Report.generatePDFBlob(data);
       data.pdf_base64 = pdfBase64;
       data.pdf_filename = filename;
@@ -501,7 +520,12 @@ UTE_PE3.App = {
       this.loadDrafts();
 
       // Sucesso: limpa o formulário para um novo relatório
-      if (result.ok) this.resetForm();
+      if (result.ok) {
+        this.resetForm();
+        // Após enviar: oferece enviar por e-mail (PDF já anexado)
+        this._lastFinalizedData = data;
+        setTimeout(() => this.showEmailDialog(), 600);
+      }
     } catch (e) {
       UTE_PE3.UI.toast('Erro ao finalizar: ' + e.message, 'error');
     } finally {
@@ -516,6 +540,10 @@ UTE_PE3.App = {
      'recomendacoes', 'observacoes', 'os_number', 'tecnico', 'supervisor', 'hora_inicial', 'hora_final'].forEach((f) => {
       const el = document.getElementById(f);
       if (el) el.value = '';
+    });
+    ['usar_descricao_ia', 'usar_recomendacoes_ia'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = true;
     });
     UTE_PE3.state.os_numbers = [];
     UTE_PE3.state.tecnicos = [];
@@ -535,6 +563,31 @@ UTE_PE3.App = {
 
   // ─── IA: revisar Descrição Detalhada ──────
 
+  /** Abre o dialog de confirmação: texto do técnico ou sugestão da IA */
+  confirmAiReview() {
+    const texto = document.getElementById('descricao_detalhada').value.trim();
+    if (texto.length < 10) {
+      UTE_PE3.UI.toast('Escreva a Descrição Detalhada primeiro (mín. 10 caracteres)', 'error');
+      return;
+    }
+    document.getElementById('ai-dialog').style.display = 'flex';
+  },
+
+  /** Trata a escolha do dialog IA */
+  async aiDialogChoice(choice) {
+    document.getElementById('ai-dialog').style.display = 'none';
+    if (choice === 'cancelar') return;
+    if (choice === 'texto') {
+      // mantém o texto do técnico: copia para o campo IA (limpo de erros básicos)
+      document.getElementById('descricao_ia').value = document.getElementById('descricao_detalhada').value;
+      document.getElementById('usar_descricao_ia').checked = true;
+      this.syncToggle('usar_descricao_ia');
+      UTE_PE3.UI.toast('Texto do técnico mantido no relatório', 'info');
+      return;
+    }
+    // choice === 'ia' → chama a IA
+    await this.aiReview();
+  },
   async aiReview() {
     const texto = document.getElementById('descricao_detalhada').value.trim();
     if (texto.length < 10) {
@@ -576,6 +629,14 @@ UTE_PE3.App = {
   // ─── Collect Form Data ────────────────────
 
   collectFormData() {
+    const usarDescIA = document.getElementById('usar_descricao_ia')?.checked !== false;
+    const usarRecIA = document.getElementById('usar_recomendacoes_ia')?.checked !== false;
+    const descricaoIa = document.getElementById('descricao_ia').value.trim();
+    const descricaoDet = document.getElementById('descricao_detalhada').value.trim();
+    // resolve o texto final do relatório conforme toggles
+    const descricaoResumida = (usarDescIA && descricaoIa) ? descricaoIa : descricaoDet;
+    const todasRecs = (document.getElementById('recomendacoes').value || '')
+      .split('\n').map((s) => s.trim()).filter(Boolean);
     return {
       os_numbers: [...UTE_PE3.state.os_numbers],
       pts: document.getElementById('pts').value.trim(),
@@ -583,15 +644,17 @@ UTE_PE3.App = {
       local: document.getElementById('local').value.trim(),
       status: document.getElementById('status').value,
       tecnicos: [...UTE_PE3.state.tecnicos],
-      recomendacoes: (document.getElementById('recomendacoes').value || '')
-        .split('\n').map((s) => s.trim()).filter(Boolean),
+      recomendacoes: usarRecIA ? todasRecs : [],
+      usar_descricao_ia: usarDescIA,
+      usar_recomendacoes_ia: usarRecIA,
+      descricao_resumida: descricaoResumida,
       supervisores: [...UTE_PE3.state.supervisores],
       data: document.getElementById('data').value.trim(),
       hora_inicial: document.getElementById('hora_inicial').value.trim(),
       hora_final: document.getElementById('hora_final').value.trim(),
       horimetro: document.getElementById('horimetro').value.trim(),
-      descricao_detalhada: document.getElementById('descricao_detalhada').value.trim(),
-      descricao_ia: document.getElementById('descricao_ia').value.trim(),
+      descricao_detalhada: descricaoDet,
+      descricao_ia: descricaoIa,
       observacoes: document.getElementById('observacoes').value.trim(),
       assinatura: UTE_PE3.Signature.getData(),
       assinaturas: UTE_PE3.Signature.getAll(),
@@ -609,14 +672,9 @@ UTE_PE3.App = {
       descricao: data.descricao,
       local: data.local,
       status: 'Finalizado',
-      tecnicos: data.tecnicos,
-      supervisores: data.supervisores,
-      data: data.data,
-      hora_inicial: data.hora_inicial,
-      hora_final: data.hora_final,
-      horimetro: data.horimetro,
       descricao_detalhada: data.descricao_detalhada,
       descricao_ia: data.descricao_ia || null,
+      descricao_resumida: data.descricao_resumida || null,
       recomendacoes: data.recomendacoes || [],
       observacoes: data.observacoes,
       assinatura: data.assinatura,
@@ -688,6 +746,158 @@ UTE_PE3.App = {
 
   escAttr(s) {
     return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  },
+
+  // ─── Pasta PDF ────────────────────────────
+
+  openPdfFolder() {
+    const url = location.hostname.endsWith('.ts.net')
+      ? '/ute-pe3-report/relatorios/'
+      : `http://${location.hostname}:8086/relatorios/`;
+    window.open(url, '_blank');
+  },
+
+  // ─── Toggle IA ────────────────────────────
+
+  syncToggle(id) {
+    // O CSS cuida do visual; aqui apenas feedback opcional
+    const el = document.getElementById(id);
+    if (!el) return;
+  },
+
+  // ─── Sync sugestões do .db (cross-device) ──
+
+  async syncSuggestionsFromDB() {
+    try {
+      const r = await fetch(`${this.SAVE_BASE}/suggestions`, { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) return;
+      const j = await r.json();
+      const cache = UTE_PE3.state.autocompleteCache;
+      // mescla: DB primeiro, depois localStorage (sem duplicar)
+      const merge = (db, local) => [...new Set([...(db || []), ...(local || [])])];
+      cache.tecnico = merge(j.tecnico, cache.tecnico);
+      cache.supervisor = merge(j.supervisor, cache.supervisor);
+      UTE_PE3.state.remetentes = j.remetente || ['vitor.braga@ht-hidrotermica.com.br'];
+      this.saveAutocompleteCache();
+    } catch (e) {
+      UTE_PE3.state.remetentes = ['vitor.braga@ht-hidrotermica.com.br'];
+    }
+  },
+
+  // ─── E-mail pós-finalizar ─────────────────
+
+  _lastFinalizedData: null,
+
+  showEmailDialog() {
+    const sel = document.getElementById('email-remetente');
+    const remetentes = UTE_PE3.state.remetentes || ['vitor.braga@ht-hidrotermica.com.br'];
+    sel.innerHTML = remetentes.map((e) => `<option value="${this.escAttr(e)}">${this.escHtml(e)}</option>`).join('');
+    document.getElementById('email-novo').value = '';
+    document.getElementById('email-dialog').style.display = 'flex';
+  },
+
+  loadRemetentes() {
+    return UTE_PE3.state.remetentes || ['vitor.braga@ht-hidrotermica.com.br'];
+  },
+
+  async addRemetente() {
+    const inp = document.getElementById('email-novo');
+    const val = inp.value.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(val)) {
+      UTE_PE3.UI.toast('E-mail inválido', 'error');
+      return;
+    }
+    if (!UTE_PE3.state.remetentes.includes(val)) {
+      UTE_PE3.state.remetentes.push(val);
+      fetch(`${this.SAVE_BASE}/suggestion`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field: 'remetente', value: val })
+      }).catch(() => {});
+    }
+    inp.value = '';
+    this.showEmailDialog();
+    document.getElementById('email-remetente').value = val;
+  },
+
+  async removeRemetente() {
+    const sel = document.getElementById('email-remetente');
+    const val = sel.value;
+    if (val === 'vitor.braga@ht-hidrotermica.com.br') {
+      UTE_PE3.UI.toast('O remetente padrão não pode ser excluído', 'info');
+      return;
+    }
+    UTE_PE3.state.remetentes = UTE_PE3.state.remetentes.filter((e) => e !== val);
+    fetch(`${this.SAVE_BASE}/suggestion?field=remetente&value=${encodeURIComponent(val)}`, {
+      method: 'DELETE'
+    }).catch(() => {});
+    this.showEmailDialog();
+    UTE_PE3.UI.toast('Remetente removido', 'info');
+  },
+
+  async emailDialogChoice(send) {
+    document.getElementById('email-dialog').style.display = 'none';
+    if (!send || !this._lastFinalizedData) return;
+    const data = this._lastFinalizedData;
+    const to = document.getElementById('email-remetente').value;
+    const subject = this.buildEmailSubject(data);
+    const body = this.buildEmailBody(data);
+    UTE_PE3.UI.toast('📨 Enviando e-mail...', 'info');
+    try {
+      const r = await fetch(`${this.SAVE_BASE}/enviar-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to, subject, body,
+          pdf_base64: data.pdf_base64,
+          pdf_filename: data.pdf_filename
+        }),
+        signal: AbortSignal.timeout(60000)
+      });
+      const j = await r.json();
+      if (r.ok && j.success) UTE_PE3.UI.toast(`✅ E-mail enviado para ${to}`, 'success');
+      else UTE_PE3.UI.toast(`Falha no e-mail: ${j.error || r.status}`, 'error');
+    } catch (e) {
+      UTE_PE3.UI.toast('Falha no e-mail: ' + e.message, 'error');
+    }
+  },
+
+  // ─── Helpers de e-mail / PDF ──────────────
+
+  /** Constrói o nome do PDF: <resumo> - <OS1>-<OS2> <DD.MM.AA>.pdf */
+  buildPdfFilename(data) {
+    const resumo = (data.descricao || 'relatorio').trim();
+    const osPart = (data.os_numbers || []).join('-') || 'sem-os';
+    const d = data.data ? data.data.split('-') : null;
+    const dia = d ? `${d[2]}.${d[1]}.${d[0].slice(-2)}` : '';
+    // sanitiza resumo: keep letras(não-ASCII ok), números, espaços, hífen
+    const safe = resumo
+      .replace(/[\\/:*?"<>|]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 60);
+    return `${safe} - ${osPart}${dia ? ' ' + dia : ''}.pdf`;
+  },
+
+  buildEmailSubject(data) {
+    const resumo = (data.descricao || '').trim();
+    const osPart = (data.os_numbers || []).join('-');
+    const d = data.data ? data.data.split('-') : null;
+    const dia = d ? `${d[2]}.${d[1]}.${d[0].slice(-2)}` : '';
+    return `[REL-APP-UTPT] ${resumo}${osPart ? ' - ' + osPart : ''}${dia ? ' ' + dia : ''}`;
+  },
+
+  buildEmailBody(data) {
+    const recs = (data.recomendacoes || []);
+    const recsTxt = recs.length ? '\n\nRecomendações:\n' + recs.map((r) => '• ' + r).join('\n') : '';
+    return `📋 OS Finalizada\n\n` +
+      `OS: ${(data.os_numbers || []).join(', ')}\n` +
+      `PTS: ${data.pts || '—'}\n` +
+      `Data: ${data.data || '—'}\n` +
+      `Local: ${data.local || '—'}\n` +
+      `Técnicos: ${(data.tecnicos || []).join(', ')}\n` +
+      `Supervisor(es): ${(data.supervisores || []).join(', ')}\n\n` +
+      `Detalhamento Técnico: ${data.descricao_resumida || data.descricao_detalhada || data.descricao || ''}` +
+      recsTxt;
   }
 };
 

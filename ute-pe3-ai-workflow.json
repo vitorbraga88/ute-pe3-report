@@ -29,7 +29,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'deepseek/deepseek-chat', messages: [ { role: 'system', content: 'Você é um engenheiro de manutenção industrial. Analise a descrição do serviço e responda SOMENTE com um objeto JSON válido (sem markdown, sem comentários) com duas chaves: \"resumo\" = reescrita técnica em português, clara e gramaticalmente correta, com detalhamento do serviço executado (equipamento, procedimento e condição encontrada). Não invente dados ausentes na descrição original (modelos, séries, medições). \"recomendacoes\" = array de 3 a 5 recomendações técnicas pertinentes (próximas inspeções, preventivas, peças a monitorar), cada item com uma frase curta.' }, { role: 'user', content: $json.body.texto || '' } ], max_tokens: 900, temperature: 0.3, response_format: { type: 'json_object' } }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek/deepseek-chat', messages: [ { role: 'system', content: 'Voce e um auxiliar de manutencao industrial. Responda APENAS com um objeto JSON valido (sem markdown, sem cercas, sem texto fora) com duas chaves:\\n\\n\"resumo\" = uma STRING (texto simples, NUNCA um array) com a descricao reescrita em portugues simples, corrigindo SO ortografia e gramatica, em topicos curtos separados por quebra de linha (cada topico comecando com - ). Vocabulario simples de pessoa da manutencao, sem palavras rebuscadas, sem inventar dados ausentes.\\n\\n\"recomendacoes\" = array de 2 a 5 strings curtas e simples em portugues, so as que fizerem sentido, usando quando aplicavel: voltar ao equipamento em funcionamento para conferir vazamentos; com equipamento operando ler os medidores (pressao, vazao, temperatura); repor estoque das pecas usadas; anotar o horimetro para a proxima manutencao.' }, { role: 'user', content: $json.body.texto || '' } ], max_tokens: 700, temperature: 0.4 }) }}",
         "options": { "timeout": 45000 }
       },
       "id": "ai-openrouter",
@@ -40,7 +40,7 @@
     },
     {
       "parameters": {
-      "jsCode": "const r = $input.first().json;\nconst content = (r?.choices?.[0]?.message?.content || '').trim();\nif (!content) throw new Error('IA sem resposta');\nlet out = { resumo: '', recomendacoes: [] };\ntry {\n  const p = JSON.parse(content);\n  out.resumo = (p.resumo || '').trim();\n  out.recomendacoes = Array.isArray(p.recomendacoes) ? p.recomendacoes.filter((x) => typeof x === 'string' && x.trim()) : [];\n} catch (e) { out.resumo = content; }\nif (!out.resumo) throw new Error('IA sem resposta');\nreturn out;"
+        "jsCode": "const r = $input.first().json;\nlet content = (r?.choices?.[0]?.message?.content || '').trim();\nif (!content) throw new Error('IA sem resposta');\ncontent = content.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/,'').trim();\nconst m = content.match(/\\{[\\s\\S]*\\}/);\nif (m) content = m[0];\nlet out = { resumo: '', recomendacoes: [] };\ntry {\n  const p = JSON.parse(content);\n  if (Array.isArray(p.resumo)) out.resumo = p.resumo.filter((x) => typeof x === 'string').map((x) => x.trim()).filter(Boolean).join('\\n');\n  else if (typeof p.resumo === 'string') out.resumo = p.resumo.trim();\n  out.recomendacoes = Array.isArray(p.recomendacoes) ? p.recomendacoes.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim()) : [];\n} catch (e) { out.resumo = content; }\nif (!out.resumo) throw new Error('IA sem resposta');\nreturn out;"
       },
       "id": "ai-extract",
       "name": "Extract Texto",

@@ -48,8 +48,13 @@ UTE_PE3.Report = {
     const supervisores = esc((data.supervisores || []).join(', ') || '—');
     const tecnicos = data.tecnicos || [];
     const resumo = esc(data.descricao || '');
-    const texto = esc(data.descricao_ia || data.descricao_resumida || data.descricao_detalhada || '');
-    const recomendacoes = Array.isArray(data.recomendacoes) ? data.recomendacoes.filter((r) => r && r.trim()) : [];
+    const usarDescIA = data.usar_descricao_ia !== false;
+    const usarRecIA = data.usar_recomendacoes_ia !== false;
+    const texto = esc(usarDescIA
+      ? (data.descricao_ia || data.descricao_resumida || data.descricao_detalhada || '')
+      : (data.descricao_detalhada || data.descricao_resumida || ''));
+    const recomendacoes = (usarRecIA && Array.isArray(data.recomendacoes))
+      ? data.recomendacoes.filter((r) => r && r.trim()) : [];
     const observacoes = esc(data.observacoes || '');
     const fotos = data.fotos || [];
     const fotoPts = data.foto_pts;

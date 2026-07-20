@@ -185,18 +185,30 @@
 
         <!-- 12b — Detalhamento Técnico (IA) -->
         <div class="form-group">
-          <label for="descricao_ia">Detalhamento Técnico (IA)</label>
+          <div class="toggle-row">
+            <label for="descricao_ia">Detalhamento Técnico (IA)</label>
+            <label class="toggle" title="Ligado: inclui no PDF | Desligado: usa só o texto do técnico">
+              <input type="checkbox" id="usar_descricao_ia" checked onchange="UTE_PE3.App.syncToggle('usar_descricao_ia')">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
           <textarea id="descricao_ia" name="descricao_ia" rows="5"
-                    placeholder="Toque em ✨ Revisar com IA para gerar o texto técnico a partir da Descrição Detalhada. O resultado pode ser editado antes de finalizar."></textarea>
+                    placeholder="Toque em ✨ Revisar com IA para gerar o texto a partir da Descrição Detalhada. O resultado pode ser editado antes de finalizar."></textarea>
           <div style="display:flex;gap:8px;margin-top:8px">
-            <button type="button" class="btn btn-secondary btn-sm" id="btn-ai" onclick="UTE_PE3.App.aiReview()">✨ Revisar com IA</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-ai" onclick="UTE_PE3.App.confirmAiReview()">✨ Revisar com IA</button>
           </div>
           <div class="error-msg" id="error-descricao_ia"></div>
         </div>
 
         <!-- 12c — Recomendações Técnicas (IA) -->
         <div class="form-group">
-          <label for="recomendacoes">Recomendações Técnicas (IA) — uma por linha</label>
+          <div class="toggle-row">
+            <label for="recomendacoes">Recomendações Técnicas (IA) — uma por linha</label>
+            <label class="toggle" title="Ligado: inclui no PDF | Desligado: omite do PDF">
+              <input type="checkbox" id="usar_recomendacoes_ia" checked onchange="UTE_PE3.App.syncToggle('usar_recomendacoes_ia')">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
           <textarea id="recomendacoes" name="recomendacoes" rows="4"
                     placeholder="Toque em ✨ Revisar com IA para gerar as recomendações. Edite, remova ou acrescente linhas antes de finalizar."></textarea>
         </div>
@@ -268,8 +280,11 @@
 
       <!-- Action Buttons -->
       <div class="action-bar">
+        <button type="button" class="btn btn-secondary" id="btn-pdfs" onclick="UTE_PE3.App.openPdfFolder()">
+          📁 Pasta PDF
+        </button>
         <button type="button" class="btn btn-secondary" id="btn-draft" onclick="UTE_PE3.App.saveDraft()">
-          💾 Salvar Rascunho
+          💾 Salvar
         </button>
         <button type="button" class="btn btn-success" id="btn-finalize" onclick="UTE_PE3.App.finalize()">
           ✅ Finalizar
@@ -283,6 +298,45 @@
       <div id="drafts-list"></div>
     </div>
   </main>
+  <!-- Dialog: Confirmar revisão IA (texto do técnico vs sugestão IA) -->
+  <div class="modal-overlay" id="ai-dialog" style="display:none">
+    <div class="modal">
+      <h3>📝 Descrição no Relatório</h3>
+      <p class="modal-text">Como prefere a descrição no relatório?</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="UTE_PE3.App.aiDialogChoice('texto')">✍️ Manter meu texto</button>
+        <button type="button" class="btn btn-primary" onclick="UTE_PE3.App.aiDialogChoice('ia')">✨ Usar sugestão da IA</button>
+      </div>
+      <button type="button" class="modal-close" onclick="UTE_PE3.App.aiDialogChoice('cancelar')">&times;</button>
+    </div>
+  </div>
+
+  <!-- Dialog: Enviar por e-mail após finalizar -->
+  <div class="modal-overlay" id="email-dialog" style="display:none">
+    <div class="modal">
+      <h3>📧 Deseja enviar por e-mail?</h3>
+      <p class="modal-text">O PDF do relatório será anexado e enviado.</p>
+      <div class="form-group">
+        <label for="email-remetente">Remetente</label>
+        <div class="input-group">
+          <select id="email-remetente" style="flex:1"></select>
+          <button type="button" class="btn btn-danger btn-sm" onclick="UTE_PE3.App.removeRemetente()" title="Excluir remetente selecionado">🗑</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="email-novo">Adicionar novo remetente (e-mail)</label>
+        <div class="input-group">
+          <input type="email" id="email-novo" placeholder="nome@empresa.com.br" autocomplete="off">
+          <button type="button" class="btn btn-primary btn-sm" onclick="UTE_PE3.App.addRemetente()">+</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="UTE_PE3.App.emailDialogChoice(false)">Agora não</button>
+        <button type="button" class="btn btn-success" onclick="UTE_PE3.App.emailDialogChoice(true)">📨 Enviar</button>
+      </div>
+      <button type="button" class="modal-close" onclick="UTE_PE3.App.emailDialogChoice(false)">&times;</button>
+    </div>
+  </div>
 
   <!-- Toast container -->
   <div id="toast-container"></div>

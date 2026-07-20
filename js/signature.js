@@ -12,6 +12,7 @@ UTE_PE3.Signature = {
   init() {
     [1, 2].forEach((n) => this.initPad(n));
     this.renderStored();
+    this.syncFromDB();   // sincroniza assinaturas salvas no .db (cross-device)
   },
 
   initPad(n) {
@@ -89,7 +90,6 @@ UTE_PE3.Signature = {
     this.renderStored();
   },
 
-  /** Salva a assinatura desenhada no pad sob o nome digitado */
   saveStored(n) {
     const nome = this.getName(n);
     const pad = this.pads[n];
@@ -98,6 +98,11 @@ UTE_PE3.Signature = {
     const map = this.getStored();
     map[nome] = pad.data;
     this.setStored(map);
+    // persiste no .db para sincronizar entre dispositivos
+    fetch(`${UTE_PE3.App.SAVE_BASE}/assinatura`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, data_url: pad.data })
+    }).catch(() => {});
     UTE_PE3.UI.toast(`Assinatura de ${nome} salva`, 'success');
   },
 
@@ -105,7 +110,34 @@ UTE_PE3.Signature = {
     const map = this.getStored();
     delete map[nome];
     this.setStored(map);
+    fetch(`${UTE_PE3.App.SAVE_BASE}/assinatura?nome=${encodeURIComponent(nome)}`, {
+      method: 'DELETE'
+    }).catch(() => {});
     UTE_PE3.UI.toast('Assinatura excluída', 'info');
+  },
+  /** Sincroniza assinaturas do .db para este dispositivo (cross-device) */
+  async syncFromDB() {
+    try {
+      const base = UTE_PE3.App?.SAVE_BASE;
+      if (!base) return;
+      const r = await fetch(`${base}/assinaturas`, { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) return;
+      const j = await r.json();
+      const nomesDB = j.nomes || [];
+      const map = this.getStored();
+      let changed = false;
+      for (const nome of nomesDB) {
+        if (!map[nome]) {
+          // busca a data_url completa desta assinatura
+          try {
+            const rr = await fetch(`${base}/assinatura?nome=${encodeURIComponent(nome)}`);
+            const jj = await rr.json();
+            if (jj.data_url) { map[nome] = jj.data_url; changed = true; }
+          } catch (e) { /* skip */ }
+        }
+      }
+      if (changed) { localStorage.setItem(this.STORE_KEY, JSON.stringify(map)); this.renderStored(); }
+    } catch (e) { /* offline — usa só localStorage */ }
   },
 
   /** Ao digitar o nome: se houver assinatura salva com esse nome, insere no pad */

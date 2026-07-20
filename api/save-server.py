@@ -24,6 +24,12 @@ import re
 import sqlite3
 import sys
 import base64
+import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -35,6 +41,11 @@ DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 RELATORIOS_DIR.mkdir(parents=True, exist_ok=True)
 
 PUBLIC_BASE_URL = "https://servidor-203.tail43f430.ts.net/ute-pe3-report"
+DEFAULT_SENDER = os.environ.get("SMTP_DEFAULT_SENDER", "vitor.braga@ht-hidrotermica.com.br")
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", DEFAULT_SENDER)
+SMTP_PASS = os.environ.get("SMTP_PASS", "")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ordens_servico (
@@ -61,13 +72,26 @@ CREATE TABLE IF NOT EXISTS ordens_servico (
   pdf_url TEXT,
   created_at TEXT DEFAULT (datetime('now','localtime'))
 );
+-- Sugestões compartilhadas entre dispositivos (sync via .db)
+CREATE TABLE IF NOT EXISTS sugestoes (
+  field TEXT NOT NULL,
+  value TEXT NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now','localtime')),
+  PRIMARY KEY (field, value)
+);
+
+CREATE TABLE IF NOT EXISTS assinaturas (
+  nome TEXT PRIMARY KEY,
+  data_url TEXT NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
 """
 SAFE_FILENAME = re.compile(r"^[A-Za-z0-9._-]+\.pdf$")
 
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
-    conn.execute(SCHEMA)
+    conn.executescript(SCHEMA)
     # migration: adiciona coluna recomendacoes em bases antigas
     cols = [r[1] for r in conn.execute("PRAGMA table_info(ordens_servico)")]
     if "recomendacoes" not in cols:
@@ -160,16 +184,121 @@ def list_recent(limit=5):
             "created_at": r["created_at"],
         })
     return result
+def get_suggestions():
+    """Returns {tecnico:[], supervisor:[], remetente:[]} shared across devices."""
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute("SELECT field, value FROM sugestoes ORDER BY value").fetchall()
+    conn.close()
+    out = {"tecnico": [], "supervisor": [], "remetente": []}
+    for field, value in rows:
+        if field in out:
+            out[field].append(value)
+    # sempre garante o remetente padrão visível
+    if DEFAULT_SENDER not in out["remetente"]:
+        out["remetente"].insert(0, DEFAULT_SENDER)
+    return out
+
+
+def upsert_suggestion(field, value):
+    if field not in ("tecnico", "supervisor", "remetente") or not value:
+        raise ValueError("field/value invalido")
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO sugestoes(field,value) VALUES(?,?) "
+        "ON CONFLICT(field,value) DO UPDATE SET updated_at=datetime('now','localtime')",
+        (field, value),
+    )
+    conn.commit()
+    conn.close()
+
+
+def remove_suggestion(field, value):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM sugestoes WHERE field=? AND value=?", (field, value))
+    conn.commit()
+    conn.close()
+
+
+def list_assinaturas():
+    """Lista apenas nomes (leve) para sync de chips entre dispositivos."""
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute("SELECT nome FROM assinaturas ORDER BY nome").fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def get_assinatura(nome):
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute("SELECT data_url FROM assinaturas WHERE nome=?", (nome,)).fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def upsert_assinatura(nome, data_url):
+    if not nome or not data_url:
+        raise ValueError("nome/data_url obrigatorios")
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO assinaturas(nome,data_url) VALUES(?,?) "
+        "ON CONFLICT(nome) DO UPDATE SET data_url=excluded.data_url, "
+        "updated_at=datetime('now','localtime')",
+        (nome, data_url),
+    )
+    conn.commit()
+    conn.close()
+
+
+def remove_assinatura(nome):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM assinaturas WHERE nome=?", (nome,))
+    conn.commit()
+    conn.close()
+
+
+def send_email(to_addr, subject, body_text, pdf_base64, pdf_filename):
+    """Envia e-mail com PDF anexo via SMTP configurado por env.
+    Requer SMTP_PASS (app-password Gmail) para funcionar."""
+    if not SMTP_PASS:
+        raise RuntimeError("SMTP_PASS nao configurado no servidor")
+    msg = MIMEMultipart()
+    msg["From"] = SMTP_USER
+    msg["To"] = to_addr
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+    if pdf_base64 and pdf_filename:
+        part = MIMEBase("application", "pdf")
+        part.set_payload(base64.b64decode(pdf_base64))
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", "attachment", filename=("utf-8", "", pdf_filename))
+        msg.attach(part)
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as srv:
+        srv.ehlo()
+        srv.starttls()
+        srv.ehlo()
+        srv.login(SMTP_USER, SMTP_PASS)
+        srv.sendmail(SMTP_USER, [to_addr], msg.as_string())
+    return True
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _cors(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
     def _json(self, code, obj):
         body = json.dumps(obj).encode("utf-8")
         self.send_response(code)
+        self._cors()
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors()
+        self.end_headers()
 
     def _read_json_body(self):
         length = int(self.headers.get("Content-Length", 0))
@@ -190,6 +319,21 @@ class Handler(BaseHTTPRequestHandler):
                 path, url = save_pdf(payload.get("filename"), payload.get("pdf_base64"))
                 return self._json(200, {"success": True, "path": path, "url": url})
 
+            if self.path == "/suggestion":
+                p = self._read_json_body()
+                upsert_suggestion(p.get("field"), (p.get("value") or "").strip())
+                return self._json(200, {"success": True})
+            if self.path == "/assinatura":
+                p = self._read_json_body()
+                upsert_assinatura((p.get("nome") or "").strip(), p.get("data_url"))
+                return self._json(200, {"success": True})
+            if self.path == "/enviar-email":
+                p = self._read_json_body()
+                send_email(
+                    p.get("to"), p.get("subject"), p.get("body"),
+                    p.get("pdf_base64"), p.get("pdf_filename"),
+                )
+                return self._json(200, {"success": True, "to": p.get("to")})
             return self._json(404, {"error": "not found"})
         except json.JSONDecodeError as e:
             self._json(400, {"error": f"invalid json: {e}"})
@@ -209,7 +353,32 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 limit = 5
             return self._json(200, {"success": True, "items": list_recent(limit)})
+        if parsed.path == "/suggestions":
+            return self._json(200, {"success": True, **get_suggestions()})
+        if parsed.path == "/assinaturas":
+            return self._json(200, {"success": True, "nomes": list_assinaturas()})
+        if parsed.path == "/assinatura":
+            qs = parse_qs(parsed.query)
+            nome = (qs.get("nome", [""])[0])
+            data = get_assinatura(nome)
+            if data is None:
+                return self._json(404, {"error": "assinatura nao encontrada"})
+            return self._json(200, {"success": True, "nome": nome, "data_url": data})
         self._json(404, {"error": "not found"})
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        qs = parse_qs(parsed.query)
+        try:
+            if parsed.path == "/suggestion":
+                remove_suggestion(qs.get("field", [""])[0], qs.get("value", [""])[0])
+                return self._json(200, {"success": True})
+            if parsed.path == "/assinatura":
+                remove_assinatura(qs.get("nome", [""])[0])
+                return self._json(200, {"success": True})
+            self._json(404, {"error": "not found"})
+        except Exception as e:  # noqa: BLE001
+            self._json(500, {"error": str(e)})
 
     def log_message(self, fmt, *args):
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
