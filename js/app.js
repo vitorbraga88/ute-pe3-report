@@ -482,6 +482,7 @@ UTE_PE3.App = {
     }
 
     const data = this.collectFormData();
+    data.status = 'Finalizado'; // PDF sempre reflete o status real de entrega (consistente com sendToWebhook)
 
     btn.disabled = true;
 
