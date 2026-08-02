@@ -7,6 +7,7 @@ UTE_PE3.state = {
   os_numbers: [],
   tecnicos: [],
   supervisores: [],
+  currentDraftRef: null,
   autocompleteCache: {
     local: [],
     tecnico: [],
@@ -338,13 +339,39 @@ UTE_PE3.App = {
       return;
     }
 
+    const ref = UTE_PE3.state.currentDraftRef;
+    if (ref && ref.source === 'server') data.id = ref.id;
+
     try {
-      await UTE_PE3.Offline.saveDraft(data);
-      UTE_PE3.UI.toast('Rascunho salvo!', 'success');
-      this.loadDrafts();
+      const r = await fetch(`${this.SAVE_BASE}/rascunho`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(10000)
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      // rascunho salvo no servidor: visível para todos os dispositivos
+      if (ref && ref.source === 'local') await UTE_PE3.Offline.deleteDraft(ref.id);
+      UTE_PE3.state.currentDraftRef = { source: 'server', id: j.id };
+      UTE_PE3.UI.toast('Rascunho salvo (compartilhado)', 'success');
     } catch (e) {
-      UTE_PE3.UI.toast('Erro ao salvar rascunho', 'error');
+      // offline ou servidor indisponível: guarda neste aparelho, sincroniza ao reconectar
+      try {
+        let localId;
+        if (ref && ref.source === 'local') {
+          await UTE_PE3.Offline.updateDraft(ref.id, data);
+          localId = ref.id;
+        } else {
+          localId = await UTE_PE3.Offline.saveDraft(data);
+        }
+        UTE_PE3.state.currentDraftRef = { source: 'local', id: localId };
+        UTE_PE3.UI.toast('Sem conexão — rascunho salvo neste aparelho, sincroniza ao reconectar', 'info');
+      } catch (e2) {
+        UTE_PE3.UI.toast('Erro ao salvar rascunho', 'error');
+        return;
+      }
     }
+    this.loadDrafts();
   },
 
   /** Confirma valores digitados mas não adicionados com "+" */
@@ -358,43 +385,75 @@ UTE_PE3.App = {
   // ─── Load Drafts ─────────────────────────
 
   async loadDrafts() {
+    const section = document.getElementById('drafts-section');
+    const list = document.getElementById('drafts-list');
+    let items = [];
+
+    // Fonte principal: servidor (compartilhado entre todos os dispositivos/técnicos)
     try {
-      const drafts = await UTE_PE3.Offline.getDrafts();
-      const section = document.getElementById('drafts-section');
-      const list = document.getElementById('drafts-list');
-
-      if (drafts.length === 0) { section.style.display = 'none'; return; }
-
-      section.style.display = 'block';
-      list.innerHTML = drafts.map((d) => `
-        <div class="draft-item" onclick="UTE_PE3.App.loadDraft(${d.id})">
-          <div class="draft-info">
-            <div class="draft-id">OS ${this.escHtml((d.os_numbers || []).join(', ') || d.os_number || '—')}${d.status === 'Enviado' ? ' ✅' : ''}</div>
-            <div class="draft-date">${new Date(d.created_at).toLocaleDateString('pt-BR')} — ${this.escHtml(d.descricao || '')}</div>
-          </div>
-          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();UTE_PE3.App.deleteDraft(${d.id})">🗑</button>
-        </div>
-      `).join('');
+      const r = await fetch(`${this.SAVE_BASE}/rascunhos`, { signal: AbortSignal.timeout(8000) });
+      if (r.ok) {
+        const j = await r.json();
+        items = (j.items || []).map((d) => ({ ...d, source: 'server' }));
+      }
     } catch (e) {
-      // IndexedDB may not be available
+      // offline: segue só com os locais abaixo
     }
+
+    // Rascunhos/histórico criados neste aparelho enquanto offline (ainda não sincronizados)
+    try {
+      const local = await UTE_PE3.Offline.getDrafts();
+      items = items.concat(local.map((d) => ({ ...d, source: 'local' })));
+    } catch (e) {
+      // IndexedDB indisponível
+    }
+
+    if (items.length === 0) { section.style.display = 'none'; return; }
+
+    section.style.display = 'block';
+    list.innerHTML = items.map((d) => `
+      <div class="draft-item" onclick="UTE_PE3.App.loadDraft('${d.source}', ${d.id})">
+        <div class="draft-info">
+          <div class="draft-id">OS ${this.escHtml((d.os_numbers || []).join(', ') || d.os_number || '—')}${d.status === 'Enviado' ? ' ✅' : ''}${d.source === 'local' ? ' 📵' : ''}</div>
+          <div class="draft-date">${new Date(d.updated_at || d.created_at).toLocaleDateString('pt-BR')} — ${this.escHtml(d.descricao || '')}${d.source === 'local' ? ' (não sincronizado)' : ''}</div>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();UTE_PE3.App.deleteDraft('${d.source}', ${d.id})">🗑</button>
+      </div>
+    `).join('');
   },
 
-  async loadDraft(id) {
+  async loadDraft(source, id) {
     try {
-      const draft = await UTE_PE3.Offline.getDraft(id);
+      let draft;
+      if (source === 'server') {
+        const r = await fetch(`${this.SAVE_BASE}/rascunho?id=${id}`, { signal: AbortSignal.timeout(8000) });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        draft = await r.json();
+      } else {
+        draft = await UTE_PE3.Offline.getDraft(id);
+      }
       if (!draft) return;
 
       this.populateForm(draft);
+      UTE_PE3.state.currentDraftRef = { source, id };
       UTE_PE3.UI.toast('Rascunho carregado', 'info');
     } catch (e) {
       UTE_PE3.UI.toast('Erro ao carregar rascunho', 'error');
     }
   },
 
-  async deleteDraft(id) {
+  async deleteDraft(source, id) {
     try {
-      await UTE_PE3.Offline.deleteDraft(id);
+      if (source === 'server') {
+        await fetch(`${this.SAVE_BASE}/rascunho?id=${id}`, { method: 'DELETE' });
+      } else {
+        await UTE_PE3.Offline.deleteDraft(id);
+      }
+      if (UTE_PE3.state.currentDraftRef
+          && UTE_PE3.state.currentDraftRef.source === source
+          && UTE_PE3.state.currentDraftRef.id === id) {
+        UTE_PE3.state.currentDraftRef = null;
+      }
       this.loadDrafts();
       UTE_PE3.UI.toast('Rascunho removido', 'info');
     } catch (e) {
@@ -500,6 +559,17 @@ UTE_PE3.App = {
       // Guarda o relatório como rascunho para edição futura
       data.status = result.ok ? 'Enviado' : 'Finalizado';
       this.syncStatusButtons(data.status === 'Enviado' ? 'Finalizado' : data.status);
+
+      // Se veio de um rascunho compartilhado, remove-o (evita duplicata visível a outros)
+      if (UTE_PE3.state.currentDraftRef) {
+        const ref = UTE_PE3.state.currentDraftRef;
+        if (ref.source === 'server') {
+          fetch(`${this.SAVE_BASE}/rascunho?id=${ref.id}`, { method: 'DELETE' }).catch(() => {});
+        } else {
+          UTE_PE3.Offline.deleteDraft(ref.id).catch(() => {});
+        }
+        UTE_PE3.state.currentDraftRef = null;
+      }
       try { await UTE_PE3.Offline.saveDraft(data); } catch (e) { /* IndexedDB indisponível */ }
 
       if (result.ok) {
@@ -537,6 +607,7 @@ UTE_PE3.App = {
 
   /** Limpa todas as entradas para um novo relatório */
   resetForm() {
+    UTE_PE3.state.currentDraftRef = null;
     ['pts', 'descricao', 'local', 'horimetro', 'descricao_detalhada', 'descricao_ia',
      'recomendacoes', 'observacoes', 'os_number', 'tecnico', 'supervisor', 'hora_inicial', 'hora_final'].forEach((f) => {
       const el = document.getElementById(f);
@@ -724,11 +795,32 @@ UTE_PE3.App = {
     try {
       const drafts = await UTE_PE3.Offline.getDrafts();
       const pending = drafts.filter((d) => d.status === 'Finalizado');
+      const emAberto = drafts.filter((d) => d.status !== 'Finalizado' && d.status !== 'Enviado');
+      let syncedCount = 0;
 
+      // 1) Rascunhos em aberto salvos offline: envia ao servidor compartilhado
+      for (const draft of emAberto) {
+        try {
+          const r = await fetch(`${this.SAVE_BASE}/rascunho`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(draft), signal: AbortSignal.timeout(10000)
+          });
+          if (r.ok) {
+            await UTE_PE3.Offline.deleteDraft(draft.id);
+            if (UTE_PE3.state.currentDraftRef && UTE_PE3.state.currentDraftRef.source === 'local'
+                && UTE_PE3.state.currentDraftRef.id === draft.id) {
+              const j = await r.json();
+              UTE_PE3.state.currentDraftRef = { source: 'server', id: j.id };
+            }
+            syncedCount++;
+          }
+        } catch (e) {
+          // tenta na próxima reconexão
+        }
+      }
+
+      // 2) OS finalizadas offline: gera o PDF (se faltar) e reenvia ao webhook n8n
       for (const draft of pending) {
-        // Rascunhos salvos offline nunca tiveram o PDF gerado (isso só acontece
-        // em finalize()); sem isso o backend rejeita com "pdf_base64 vazio".
-        // Gera agora, com os mesmos dados do rascunho, antes de reenviar.
         if (!draft.pdf_base64) {
           try {
             const filename = draft.pdf_filename || this.buildPdfFilename(draft);
@@ -739,11 +831,11 @@ UTE_PE3.App = {
           }
         }
         const sent = await this.sendToWebhook(draft);
-        if (sent.ok) await UTE_PE3.Offline.deleteDraft(draft.id);
+        if (sent.ok) { await UTE_PE3.Offline.deleteDraft(draft.id); syncedCount++; }
       }
 
-      if (pending.length > 0) {
-        UTE_PE3.UI.toast(`${pending.length} OS sincronizada(s)`, 'success');
+      if (syncedCount > 0) {
+        UTE_PE3.UI.toast(`${syncedCount} rascunho(s)/OS sincronizado(s)`, 'success');
         this.loadDrafts();
       }
     } catch (e) {

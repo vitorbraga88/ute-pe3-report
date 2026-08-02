@@ -36,11 +36,13 @@ CHAT_ID = int(os.environ.get("TELEGRAM_CHAT_ID", "5118460498"))
 PWA_URL = "https://servidor-203.tail43f430.ts.net/ute-pe3-report/"
 SAVE_SERVER_URL = os.environ.get("SAVE_SERVER_URL", "http://127.0.0.1:8087")
 RELATORIOS_URL = PWA_URL.rstrip("/") + "/relatorios/"
+BUSCA_URL = PWA_URL.rstrip("/") + "/relatorios.html"
 
 # Rótulos do teclado persistente (fixo embaixo)
 BTN_APP = "🌐 Abrir Aplicação"
 BTN_PDFS = "📁 Pasta de PDFs"
 BTN_RELATORIOS = "📄 Últimos Relatórios"
+BTN_BUSCA = "🔎 Buscar Relatórios"
 BTN_STATUS = "ℹ️ Status"
 
 
@@ -76,13 +78,14 @@ def _main_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(BTN_APP, url=PWA_URL)],
         [InlineKeyboardButton(BTN_PDFS, url=RELATORIOS_URL)],
+        [InlineKeyboardButton(BTN_BUSCA, url=BUSCA_URL)],
     ])
 
 
 def _persistent_keyboard():
     """Teclado fixo na parte de baixo do Telegram (não some)."""
     return ReplyKeyboardMarkup(
-        [[BTN_APP, BTN_PDFS], [BTN_RELATORIOS, BTN_STATUS]],
+        [[BTN_APP, BTN_PDFS], [BTN_RELATORIOS, BTN_BUSCA], [BTN_STATUS]],
         resize_keyboard=True,
         is_persistent=True,
     )
@@ -152,6 +155,11 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "📁 Toque para abrir a pasta de PDFs:",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BTN_PDFS, url=RELATORIOS_URL)]]),
+        )
+    elif text == BTN_BUSCA:
+        await update.message.reply_text(
+            "🔎 Toque para buscar relatórios antigos por data, OS, supervisor ou técnico:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BTN_BUSCA, url=BUSCA_URL)]]),
         )
     elif text == BTN_RELATORIOS:
         await relatorios_cmd(update, context)

@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
   
   <meta name="description" content="Sistema de Gestao de Ordens de Servico e PTS - UTE Pernambuco III">
   <link rel="manifest" href="manifest.json">
@@ -280,13 +280,18 @@
 
       <!-- Action Buttons -->
       <div class="action-bar">
-        <button type="button" class="btn btn-secondary" id="btn-pdfs" onclick="UTE_PE3.App.openPdfFolder()">
-          📁 Pasta PDF
-        </button>
-        <button type="button" class="btn btn-secondary" id="btn-draft" onclick="UTE_PE3.App.saveDraft()">
-          💾 Salvar
-        </button>
-        <button type="button" class="btn btn-success" id="btn-finalize" onclick="UTE_PE3.App.finalize()">
+        <div class="action-bar-secondary">
+          <button type="button" class="btn btn-secondary" id="btn-pdfs" onclick="UTE_PE3.App.openPdfFolder()">
+            📁 PDFs
+          </button>
+          <button type="button" class="btn btn-secondary" id="btn-relatorios" onclick="location.href='relatorios.html'">
+            📄 Relatórios
+          </button>
+          <button type="button" class="btn btn-secondary" id="btn-draft" onclick="UTE_PE3.App.saveDraft()">
+            💾 Salvar
+          </button>
+        </div>
+        <button type="button" class="btn btn-success btn-block" id="btn-finalize" onclick="UTE_PE3.App.finalize()">
           ✅ Finalizar
         </button>
       </div>

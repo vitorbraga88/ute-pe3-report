@@ -176,7 +176,7 @@ select {
   border-radius: 0 0 8px 8px;
   max-height: 160px;
   overflow-y: auto;
-  z-index: 50;
+  z-index: 60;
   display: none;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
@@ -222,20 +222,23 @@ select {
   font-size: 1rem;
   line-height: 1;
   opacity: 0.6;
+  padding: 6px;
+  margin: -6px -8px -6px -2px;
 }
 .tag .remove-tag:hover { opacity: 1; }
 
 /* Input group (input + button side by side) */
 .input-group { display: flex; gap: 8px; }
 .input-group input { flex: 1; }
+.input-group .btn { min-width: 44px; }
 
 /* Voice button */
 .voice-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border: 1.5px solid var(--gray-200);
   border-radius: 8px;
   background: white;
@@ -288,14 +291,14 @@ select {
   position: absolute;
   top: 4px;
   right: 4px;
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: rgba(220, 38, 38, 0.85);
   color: white;
   border: none;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -357,12 +360,8 @@ select {
 .btn-block { width: 100%; }
 
 /* Action bar */
-.action-bar {
-  display: flex;
-  gap: 12px;
-  margin-top: 8px;
-}
-.action-bar .btn { flex: 1; }
+.action-bar-secondary { display: flex; gap: 8px; }
+.action-bar-secondary .btn { flex: 1; min-height: 44px; font-size: 0.76rem; padding: 8px 4px; }
 
 /* Status badge */
 .status-badge {
@@ -446,7 +445,6 @@ select {
   .container { padding: 10px; }
   .card { padding: 14px; }
   .photo-grid { grid-template-columns: repeat(2, 1fr); }
-  .action-bar { flex-direction: column; }
 }
 
 /* Print */
@@ -518,10 +516,11 @@ input[type="number"], input[inputmode="numeric"], .tag { font-variant-numeric: t
   -webkit-backdrop-filter: blur(8px);
   border-top: 1px solid var(--gray-200);
   z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.action-bar .btn { min-height: 48px; }
-.action-bar { display: flex; gap: 8px; }
-.action-bar .btn { flex: 1; }
+#btn-finalize { min-height: 50px; }
 
 /* ─── Toggle switch (verde ligado / cinza desligado) ─── */
 .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

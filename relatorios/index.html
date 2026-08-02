@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+  <meta name="description" content="Pasta de PDFs - UTE Pernambuco III">
+  <title>UTE-PE3 — Pasta de PDFs</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="icon" type="image/x-icon" href="../assets/favicon.ico">
+  <meta name="theme-color" content="#1e40af">
+  <style>
+    .relatorios-header { display: flex; align-items: center; gap: 10px; }
+    .relatorios-header .back-link {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,.15);
+      color: #fff; text-decoration: none; font-size: 1.2rem; flex-shrink: 0;
+    }
+    .relatorios-header .back-link:active { background: rgba(255,255,255,.28); }
+    #pdf-search { margin-bottom: 12px; }
+    .pdf-item {
+      display: flex; align-items: center; gap: 12px; padding: 12px;
+      border: 1px solid var(--gray-200); border-radius: 10px; margin-bottom: 8px;
+      background: #fff; text-decoration: none; color: inherit;
+    }
+    .pdf-item:active { background: var(--gray-50); }
+    .pdf-icon {
+      width: 40px; height: 40px; border-radius: 8px; background: var(--primary-bg);
+      display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0;
+    }
+    .pdf-info { flex: 1; min-width: 0; }
+    .pdf-name { font-size: 0.88rem; font-weight: 600; color: var(--gray-800); word-break: break-word; }
+    .pdf-meta { font-size: 0.75rem; color: var(--gray-500); margin-top: 2px; }
+    #pdf-empty { text-align: center; color: var(--gray-500); padding: 30px 10px; font-size: 0.9rem; }
+    #pdf-count { font-size: 0.82rem; color: var(--gray-500); margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="relatorios-header">
+      <a href="../index.html" class="back-link" title="Voltar à aplicação">←</a>
+      <div>
+        <h1>Pasta de PDFs</h1>
+        <div class="header-sub">Todos os relatórios gerados</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <input type="text" id="pdf-search" placeholder="🔎 Buscar por nome, OS ou data..." oninput="filtrar()">
+      <div id="pdf-count"></div>
+      <div id="pdf-list"></div>
+      <div id="pdf-empty" style="display:none">Nenhum PDF encontrado.</div>
+    </div>
+  </main>
+
+  <div id="toast-container"></div>
+
+  <script>
+    const SAVE_BASE = location.hostname.endsWith('.ts.net') ? '/ute-pe3-report/api' : `http://${location.hostname}:8087`;
+    let allFiles = [];
+
+    function fmtSize(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function fmtDate(mtime) {
+      const d = new Date(mtime * 1000);
+      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+        ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function escHtml(s) {
+      return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function render(files) {
+      const list = document.getElementById('pdf-list');
+      const empty = document.getElementById('pdf-empty');
+      document.getElementById('pdf-count').textContent = `${files.length} PDF(s)`;
+      if (files.length === 0) {
+        list.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+      list.innerHTML = files.map((f) => `
+        <a class="pdf-item" href="${encodeURIComponent(f.filename)}" target="_blank" rel="noopener">
+          <div class="pdf-icon">📄</div>
+          <div class="pdf-info">
+            <div class="pdf-name">${escHtml(f.filename)}</div>
+            <div class="pdf-meta">${fmtDate(f.mtime)} · ${fmtSize(f.size)}</div>
+          </div>
+        </a>
+      `).join('');
+    }
+
+    function filtrar() {
+      const q = document.getElementById('pdf-search').value.trim().toLowerCase();
+      const filtered = q ? allFiles.filter((f) => f.filename.toLowerCase().includes(q)) : allFiles;
+      render(filtered);
+    }
+
+    async function load() {
+      try {
+        const r = await fetch(`${SAVE_BASE}/list-files`, { signal: AbortSignal.timeout(15000) });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const j = await r.json();
+        allFiles = j.items || [];
+        render(allFiles);
+      } catch (e) {
+        document.getElementById('pdf-list').innerHTML =
+          `<div id="pdf-empty">⚠️ Falha ao listar PDFs: ${escHtml(e.message)}</div>`;
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

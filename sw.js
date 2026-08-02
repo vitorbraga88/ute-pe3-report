@@ -1,7 +1,8 @@
-const CACHE_NAME = 'ute-pe3-v6';
+const CACHE_NAME = 'ute-pe3-v7';
 const ASSETS = [
   './',
   './index.html',
+  './relatorios.html',
   './css/styles.css',
   './js/app.js',
   './js/validation.js',
@@ -9,9 +10,12 @@ const ASSETS = [
   './js/offline.js',
   './js/signature.js',
   './js/report.js',
+  './js/relatorios.js',
   './manifest.json',
   './assets/logo-ute.png',
-  './assets/icons/favicon.ico'
+  './assets/favicon.ico',
+  './assets/icon-192.png',
+  './assets/icon-512.png'
 ];
 
 self.addEventListener('install', (e) => {

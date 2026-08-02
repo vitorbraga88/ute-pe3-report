@@ -18,6 +18,9 @@ Endpoints:
                           Returns {"success": true, "url": "https://.../relatorios/<filename>"}
   GET  /list-recent?limit=5 — last N finalized records (os_numbers, data, pdf url)
   GET  /health         — liveness probe
+  GET  /rascunhos, GET/POST/DELETE /rascunho — rascunhos compartilhados (todos os dispositivos veem)
+  GET  /relatorios?status=&data_de=&data_ate=&os=&supervisor=&tecnico=&q=&limit=&offset= — busca filtrada
+  GET  /list-files    — lista todos os PDFs em relatorios/ direto do disco
 """
 import json
 import re
@@ -103,6 +106,16 @@ CREATE TABLE IF NOT EXISTS assinaturas (
   nome TEXT PRIMARY KEY,
   data_url TEXT NOT NULL,
   updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS rascunhos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  payload TEXT NOT NULL,
+  os_numbers TEXT,
+  descricao TEXT,
+  status TEXT DEFAULT 'Aberto',
+  updated_at TEXT DEFAULT (datetime('now','localtime')),
+  created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 """
 SAFE_FILENAME = re.compile(r"^[^/\\\x00-\x1f]+\.pdf$", re.IGNORECASE)
@@ -300,6 +313,148 @@ def send_email(to_addr, subject, body_text, pdf_base64, pdf_filename):
     return True
 
 
+def insert_rascunho(payload):
+    conn = sqlite3.connect(DB_PATH)
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    os_numbers = as_json_array(payload.get("os_numbers") or payload.get("os_number"))
+    cur = conn.execute(
+        "INSERT INTO rascunhos (payload, os_numbers, descricao, status) VALUES (?,?,?,?)",
+        (payload_json, os_numbers, payload.get("descricao", ""), payload.get("status", "Aberto")),
+    )
+    conn.commit()
+    row_id = cur.lastrowid
+    conn.close()
+    return row_id
+
+
+def update_rascunho(rascunho_id, payload):
+    conn = sqlite3.connect(DB_PATH)
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    os_numbers = as_json_array(payload.get("os_numbers") or payload.get("os_number"))
+    cur = conn.execute(
+        """UPDATE rascunhos SET payload=?, os_numbers=?, descricao=?, status=?,
+           updated_at=datetime('now','localtime') WHERE id=?""",
+        (payload_json, os_numbers, payload.get("descricao", ""), payload.get("status", "Aberto"), rascunho_id),
+    )
+    conn.commit()
+    changed = cur.rowcount
+    conn.close()
+    if not changed:
+        raise ValueError(f"rascunho {rascunho_id} nao encontrado")
+    return rascunho_id
+
+
+def list_rascunhos():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT id, os_numbers, descricao, status, updated_at, created_at "
+        "FROM rascunhos ORDER BY updated_at DESC"
+    ).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        try:
+            os_nums = json.loads(r["os_numbers"] or "[]")
+        except json.JSONDecodeError:
+            os_nums = []
+        result.append({
+            "id": r["id"],
+            "os_numbers": os_nums,
+            "descricao": r["descricao"],
+            "status": r["status"],
+            "updated_at": r["updated_at"],
+            "created_at": r["created_at"],
+        })
+    return result
+
+
+def get_rascunho(rascunho_id):
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute("SELECT payload FROM rascunhos WHERE id=?", (rascunho_id,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    data = json.loads(row[0])
+    data["id"] = rascunho_id
+    return data
+
+
+def delete_rascunho(rascunho_id):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM rascunhos WHERE id=?", (rascunho_id,))
+    conn.commit()
+    conn.close()
+
+
+def list_relatorios(filters):
+    """Busca paginada/filtrada em ordens_servico para a pagina de relatorios antigos."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    clauses = []
+    params = []
+    if filters.get("status"):
+        clauses.append("status = ?")
+        params.append(filters["status"])
+    if filters.get("data_de"):
+        clauses.append("data >= ?")
+        params.append(filters["data_de"])
+    if filters.get("data_ate"):
+        clauses.append("data <= ?")
+        params.append(filters["data_ate"])
+    if filters.get("os"):
+        clauses.append("os_numbers LIKE ?")
+        params.append(f'%{filters["os"]}%')
+    if filters.get("supervisor"):
+        clauses.append("supervisores LIKE ?")
+        params.append(f'%{filters["supervisor"]}%')
+    if filters.get("tecnico"):
+        clauses.append("tecnicos LIKE ?")
+        params.append(f'%{filters["tecnico"]}%')
+    if filters.get("q"):
+        q = f'%{filters["q"]}%'
+        clauses.append("(descricao LIKE ? OR descricao_resumida LIKE ? OR local LIKE ?)")
+        params.extend([q, q, q])
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    limit = filters.get("limit", 20)
+    offset = filters.get("offset", 0)
+    total = conn.execute(f"SELECT COUNT(*) FROM ordens_servico {where}", params).fetchone()[0]
+    rows = conn.execute(
+        f"""SELECT id, os_numbers, pts, descricao, descricao_resumida, local, status,
+                   tecnicos, supervisores, data, hora_inicial, hora_final, pdf_url, created_at
+            FROM ordens_servico {where}
+            ORDER BY id DESC LIMIT ? OFFSET ?""",
+        params + [limit, offset],
+    ).fetchall()
+    conn.close()
+
+    def jl(v):
+        try:
+            return json.loads(v or "[]")
+        except json.JSONDecodeError:
+            return []
+
+    items = [{
+        "id": r["id"], "os_numbers": jl(r["os_numbers"]), "pts": r["pts"],
+        "descricao": r["descricao"], "descricao_resumida": r["descricao_resumida"],
+        "local": r["local"], "status": r["status"], "tecnicos": jl(r["tecnicos"]),
+        "supervisores": jl(r["supervisores"]), "data": r["data"],
+        "hora_inicial": r["hora_inicial"], "hora_final": r["hora_final"],
+        "pdf_url": r["pdf_url"], "created_at": r["created_at"],
+    } for r in rows]
+    return items, total
+
+
+def list_files():
+    """Lista todos os PDFs em relatorios/ direto do disco (independe do SQLite)."""
+    items = []
+    for p in RELATORIOS_DIR.glob("*.pdf"):
+        st = p.stat()
+        items.append({"filename": p.name, "size": st.st_size, "mtime": st.st_mtime})
+    items.sort(key=lambda x: x["mtime"], reverse=True)
+    return items
+
+
 class Handler(BaseHTTPRequestHandler):
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -347,6 +502,14 @@ class Handler(BaseHTTPRequestHandler):
                 p = self._read_json_body()
                 upsert_assinatura((p.get("nome") or "").strip(), p.get("data_url"))
                 return self._json(200, {"success": True})
+            if self.path == "/rascunho":
+                p = self._read_json_body()
+                rid = p.get("id")
+                if rid:
+                    update_rascunho(int(rid), p)
+                    return self._json(200, {"success": True, "id": int(rid)})
+                new_id = insert_rascunho(p)
+                return self._json(200, {"success": True, "id": new_id})
             if self.path == "/enviar-email":
                 p = self._read_json_body()
                 send_email(
@@ -384,6 +547,41 @@ class Handler(BaseHTTPRequestHandler):
             if data is None:
                 return self._json(404, {"error": "assinatura nao encontrada"})
             return self._json(200, {"success": True, "nome": nome, "data_url": data})
+        if parsed.path == "/rascunhos":
+            return self._json(200, {"success": True, "items": list_rascunhos()})
+        if parsed.path == "/rascunho":
+            qs = parse_qs(parsed.query)
+            try:
+                rid = int(qs.get("id", [""])[0])
+            except ValueError:
+                return self._json(400, {"error": "id invalido"})
+            data = get_rascunho(rid)
+            if data is None:
+                return self._json(404, {"error": "rascunho nao encontrado"})
+            return self._json(200, {"success": True, **data})
+        if parsed.path == "/relatorios":
+            qs = parse_qs(parsed.query)
+
+            def one(key, default=""):
+                return qs.get(key, [default])[0]
+
+            try:
+                limit = max(1, min(100, int(one("limit", "20"))))
+            except ValueError:
+                limit = 20
+            try:
+                offset = max(0, int(one("offset", "0")))
+            except ValueError:
+                offset = 0
+            filters = {
+                "status": one("status"), "data_de": one("data_de"), "data_ate": one("data_ate"),
+                "os": one("os"), "supervisor": one("supervisor"), "tecnico": one("tecnico"),
+                "q": one("q"), "limit": limit, "offset": offset,
+            }
+            items, total = list_relatorios(filters)
+            return self._json(200, {"success": True, "items": items, "total": total, "limit": limit, "offset": offset})
+        if parsed.path == "/list-files":
+            return self._json(200, {"success": True, "items": list_files()})
         self._json(404, {"error": "not found"})
 
     def do_DELETE(self):
@@ -395,6 +593,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, {"success": True})
             if parsed.path == "/assinatura":
                 remove_assinatura(qs.get("nome", [""])[0])
+                return self._json(200, {"success": True})
+            if parsed.path == "/rascunho":
+                rid = qs.get("id", [""])[0]
+                if not rid:
+                    return self._json(400, {"error": "id obrigatorio"})
+                delete_rascunho(int(rid))
                 return self._json(200, {"success": True})
             self._json(404, {"error": "not found"})
         except Exception as e:  # noqa: BLE001
