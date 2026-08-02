@@ -22,13 +22,13 @@ UTE_PE3.App = {
    * - via :8086 direto (http): n8n direto na porta 5678 (sem TLS)
    */
   get WEBHOOK_BASE() {
-    if (location.hostname.endsWith('.ts.net')) return '/webhook';
-    return `http://${location.hostname}:5678/webhook`;
+    if (location.hostname.endsWith('.ts.net')) return '/ute-pe3-report/webhook';
+    return '/webhook';
   },
-  /** Base do save-server (porta 8087), ciente da origem (mesma lógica do webhook). */
+  /** Base do save-server via proxy do static-server (porta única 8086). */
   get SAVE_BASE() {
     if (location.hostname.endsWith('.ts.net')) return '/ute-pe3-report/api';
-    return `http://${location.hostname}:8087`;
+    return '/api';
   },
 
   /** Initialize the application */

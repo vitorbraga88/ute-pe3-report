@@ -11,7 +11,7 @@ UTE_PE3.Relatorios = {
 
   get SAVE_BASE() {
     if (location.hostname.endsWith('.ts.net')) return '/ute-pe3-report/api';
-    return `http://${location.hostname}:8087`;
+    return '/api';
   },
 
   escHtml(s) {

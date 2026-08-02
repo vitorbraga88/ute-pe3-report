@@ -43,7 +43,7 @@ RELATORIOS_DIR = BASE_DIR / "relatorios"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 RELATORIOS_DIR.mkdir(parents=True, exist_ok=True)
 
-PUBLIC_BASE_URL = "https://servidor-203.tail43f430.ts.net/ute-pe3-report"
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://100.74.176.72:8086")
 
 
 def _load_dotenv(path):
