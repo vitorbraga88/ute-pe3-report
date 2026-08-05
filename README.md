@@ -1,84 +1,76 @@
-# UTE-PE3 Report
+# Relatório de OS/PTS — PWA
 
-Sistema de gestão de Ordens de Serviço (OS) e Permissões de Trabalho (PTS) — UTE Pernambuco III.
+Sistema de registro e geração de relatórios de **Ordens de Serviço (OS)** e **Permissões de Trabalho (PTS)** para usinas termelétricas. Feito para o técnico registrar o serviço **no celular, na hora, mesmo sem sinal** — e entregar o relatório finalizado em PDF na mesma hora, via Telegram e e-mail.
 
-## Acesso
-- **PWA:** https://servidor-203.tail43f430.ts.net/ute-pe3-report/
-- **n8n:** http://100.74.176.72:5678
-- **Telegram Bot:** @report_B_bot
+## 🚀 Destaques
 
-## Funcionalidades
-- Formulário OS/PTS completo (OS e Supervisor com múltiplos valores via tags)
-- Data (calendário nativo) e Hora Inicial/Final (HH:mm nativo)
-- Assinaturas digitais duplas (2 pads touch) com memória por nome e sincronização entre dispositivos
-- Sincronização cross-device de técnicos/supervisores/remetentes de e-mail (SQLite via save-server, não só localStorage)
-- **Rascunhos compartilhados no servidor**: salvos em SQLite (tabela `rascunhos`), visíveis para qualquer técnico/supervisor em qualquer aparelho; IndexedDB local vira apenas fila de saída (outbox) quando offline, sincronizada automaticamente ao reconectar
-- **Página de busca de relatórios antigos** (`relatorios.html`): filtros por texto livre, OS, status, supervisor, técnico e intervalo de datas, com paginação
-- **Pasta de PDFs com interface própria** (`relatorios/index.html`): substitui a listagem crua do servidor por uma UI com busca por nome e botão de volta à aplicação
-- Entrada por voz (Web Speech API, pt-BR)
-- Relatório fotográfico com compressão automática + foto obrigatória da PTS (página dedicada no PDF)
-- Revisão de descrição por IA (OpenRouter/DeepSeek) sob demanda, com diálogo de confirmação (texto original vs. IA) antes de aplicar
-- Toggles independentes para incluir/excluir a descrição-IA e as recomendações-IA no PDF final
-- Recomendações técnicas condicionais geradas pela IA (vocabulário simples, formato de tópicos)
-- Geração de PDF real no cliente (jsPDF + html2canvas), nome do arquivo `<resumo> - <OS(s)> <DD.MM.AA>.pdf`
-- Diálogo de envio por e-mail pós-finalização, com seletor de remetente e anexo do PDF (SMTP via save-server)
-- Integração n8n → OpenRouter (resumo IA) → SQLite (via save-server) + Telegram (PDF + texto, 3 chats)
-- PDF salvo no servidor em `relatorios/` e servido publicamente
-- Bot Telegram com `/relatorios` (últimos 5 PDFs), busca de relatórios antigos, teclado persistente e mensagem fixada com acessos rápidos
-- Botões dedicados "PDFs" e "Relatórios" na barra de ações (layout em 2 linhas, otimizado para toque em Android)
-- PWA instalável no celular (iOS e Android), Service Worker network-first para HTML/JS/CSS
-- Modo offline com IndexedDB: rascunhos salvos localmente sincronizam automaticamente ao reconectar (PDF é gerado no momento do sync, não apenas no finalize)
+- **Mobile-first e PWA**: instala no celular (iOS/Android), otimizado para toque, funciona offline
+- **Registro na hora do serviço**: formulário completo no aparelho — sem papel, sem "depois eu passo pro PC"
+- **Offline-first real**: sem conexão, o rascunho fica no aparelho e sincroniza sozinho ao reconectar (o PDF pendente é gerado no momento do sync)
+- **IA no relatório**: revisão de descrição + recomendações técnicas via IA (OpenRouter), com diálogo de confirmação antes de aplicar
+- **Evidência fotográfica**: câmera com compressão automática (≤300KB), galeria com descrição por foto e **foto da PTS obrigatória**
+- **Assinatura digital dupla**: 2 pads touch no próprio aparelho, sem imprimir e escanear
+- **Entrega instantânea**: PDF gerado no cliente (A4), enviado para n8n → SQLite + **Telegram** (3 chats) e opcionalmente por **e-mail** com o PDF anexo
 
-## Stack
+## ⚙️ Funcionalidades
+
+### Formulário
+- OS múltiplas via tags (validação de 6 dígitos), PTS com auto-formato `N-AA`
+- Data e hora nativas (calendário/HH:mm), horímetro, local e status (segmentado)
+- Técnicos e supervisores múltiplos, com **autocomplete que memoriza** (localStorage + SQLite, sincronizado entre dispositivos)
+- **Entrada por voz** (Web Speech API, pt-BR) para a descrição detalhada
+- Validação completa: data não futura, hora final > inicial, campos obrigatórios (1+ OS, 1+ técnico, 1+ supervisor)
+
+### IA (via n8n → OpenRouter)
+- Revisão da descrição detalhada: resumo técnico + **recomendações em formato de tópicos**
+- Diálogo de confirmação: texto do técnico **ou** sugestão da IA — o profissional decide
+- Toggles independentes para incluir/excluir descrição-IA e recomendações-IA no PDF final
+
+### Relatório PDF
+- Gerado no cliente (jsPDF + html2canvas), páginas A4: capa, detalhamento, galeria de fotos, anexo da PTS, assinaturas, recomendações e observações
+- Nome padrão: `<resumo> - <OS(s)> <DD.MM.AA>.pdf`
+- Salvo no servidor e servido publicamente; download automático no aparelho
+
+### Colaboração e histórico
+- **Rascunhos compartilhados no servidor** (SQLite): qualquer técnico/supervisor continua de onde o outro parou, em qualquer aparelho
+- Fila local (IndexedDB) quando offline, com sync automático ao reconectar
+- **Busca de relatórios antigos** (`relatorios.html`): filtros por texto livre, OS, status, supervisor, técnico e intervalo de datas, com paginação
+- **Pasta de PDFs com UI própria** (`relatorios/index.html`): busca por nome em vez de listagem crua
+
+### Bot Telegram
+- `/relatorios` → últimos 5 PDFs
+- Busca de relatórios antigos, teclado persistente e mensagem fixada com acessos rápidos
+
+## 💰 Ganhos no registro
+
+| Antes (papel/planilha) | Com o app |
+|---|---|
+| Anotava no papel, digitava depois no PC | Registro direto no celular, na hora do serviço |
+| Foto solta no WhatsApp, sem vínculo com a OS | Fotos comprimidas e **vinculadas ao relatório**, com descrição |
+| Descrição dependia da memória do técnico | Digitação por **voz** + **revisão IA** padroniza o texto |
+| Relatório formatado "à mão" (Word) | **PDF A4 automático** com nome padrão e identidade visual |
+| Entrega por e-mail manual / impressão | **Telegram + e-mail** com PDF em 1 clique |
+| Sem sinal na usina = perdia o registro | **Offline-first**: preenche sem sinal, sincroniza sozinho |
+| Relatório preso no PC de quem fez | **Rascunhos compartilhados** + histórico pesquisável |
+| Assinatura impressa/escaneada | **Assinatura digital dupla** no próprio aparelho |
+
+## 🧱 Stack
+
 HTML5 · CSS · Vanilla JS · jsPDF · html2canvas · SQLite · n8n · OpenRouter (DeepSeek) · Caddy (reverse proxy) · Telegram Bot API · smtplib (Gmail)
 
-## [WARN] Problema conhecido — HTTPS público indisponível
-Desde 31/07 existe um **conflito de porta 443** entre dois Caddys distintos no servidor:
-- `caddy.service` (systemd, nativo no host, `/etc/caddy/Caddyfile`) — serve só `/avs*` de outro projeto (AVS Soluções Elétricas), sem certificado explícito configurado.
-- `n8n-tls-proxy` (Docker, `docker/n8n-tls-proxy/Caddyfile`) — é quem deveria servir `/ute-pe3-report/*`, `/ute-pe3-report/api/*` e `/webhook/*`.
+## Arquitetura / Roteamento
 
-O `caddy.service` nativo venceu o bind da porta 443 no último boot; o container Docker não consegue publicar a porta enquanto isso persistir. Resultado: `https://servidor-203.tail43f430.ts.net/*` retorna erro de TLS ("internal error") para **qualquer** rota, incluindo as do próprio `/avs*` nativo — não é algo específico do UTE-PE3.
-**Não mexi no `caddy.service`** por afetar outro projeto sem contexto/autorização. Decisão necessária: desativar um dos dois Caddys ou migrar as rotas do UTE-PE3 para o Caddy que efetivamente vencer a porta 443.
-**Contorno atual**: acessar via IP direto na rede Tailscale — `http://100.74.176.72:8086/` (app) e `http://100.74.176.72:8087/` (API) — funciona normalmente e foi o caminho usado para validar todas as mudanças desta rodada.
-
-## Arquitetura / Roteamento (produção, quando o Caddy do Docker estiver servindo a porta 443)
 ```
-https://servidor-203.tail43f430.ts.net/
-├── /ute-pe3-report/*        → Caddy → 127.0.0.1:8086 (arquivos estáticos, PWA)
+https://<servidor>.ts.net/
+├── /ute-pe3-report/*        → Caddy → 127.0.0.1:8086 (estáticos, PWA)
 ├── /ute-pe3-report/api/*    → Caddy → 127.0.0.1:8087 (save-server, prefixo removido)
-└── /webhook/*                → Caddy → n8n:5678 (workflows principal + revisão IA)
-```
-- **Servidor estático (`:8086`)**: `python3 -m http.server`, gerenciado via **systemd** (`ute-pe3-static.service`, `Restart=always`).
-- **save-server (`:8087`)**: `api/save-server.py` (stdlib puro, sem dependências), gerenciado via **systemd** (`ute-pe3-save-server.service`, `Restart=always`).
-- **Bot Telegram**: `bot.py`, gerenciado via **systemd** (`ute-pe3-bot.service`, `Restart=always`) — antes rodava via `crontab @reboot` + `nohup`, sem reinício automático em caso de crash; foi essa lacuna que deixou o bot fora do ar sem detecção até esta rodada de correção.
-- **n8n**: dois workflows — `ute-pe3-workflow.json` (principal: recebe OS finalizada, opcionalmente resume via IA, salva PDF, grava SQLite, dispara Telegram) e `ute-pe3-ai-workflow.json` (revisão de descrição sob demanda, chamada pelo botão "Revisar com IA").
-
-## Configuração de e-mail (SMTP)
-Variáveis lidas de `api/.env` (via `systemd EnvironmentFile=` ou dotenv-loader interno do `save-server.py`):
-```
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=<conta gmail>
-SMTP_PASS=<senha de app do Gmail>
-SMTP_DEFAULT_SENDER=UTE PE3 Report <endereco@dominio>
+└── /webhook/*                → Caddy → n8n:5678 (workflow principal + revisão IA)
 ```
 
-## Deploy
-Este projeto roda diretamente no servidor (`100.74.176.72` / `servidor-203.tail43f430.ts.net`, mesma máquina do desenvolvimento) — não há passo de `rsync`/deploy remoto. Edite os arquivos em `/home/vitorbraga/ute-pe3-report/` e:
-```bash
-# os 3 serviços rodam via systemd com Restart=always — reinicie o que mudou
-sudo systemctl restart ute-pe3-static.service       # index.html/css/js/relatorios.html
-sudo systemctl restart ute-pe3-save-server.service   # api/save-server.py
-sudo systemctl restart ute-pe3-bot.service           # bot.py
+Fluxo de finalização: formulário → PDF no cliente → webhook n8n → OpenRouter (resumo/recomendações) + SQLite (histórico) + Telegram (PDF + texto) → e-mail opcional com PDF anexo.
 
-# workflows n8n — reimportar via API (deactivate → PUT sem id/versionId/active → activate)
-```
-Bump `CACHE_NAME` em `sw.js` sempre que houver mudança em HTML/CSS/JS para forçar atualização do Service Worker nos clientes.
+## 📌 Notas de deploy
 
-## Desenvolvimento
-```bash
-git clone https://github.com/vitorbraga88/ute-pe3-report.git
-cd ute-pe3-report
-python3 -m http.server 8086       # servir o front localmente
-python3 api/save-server.py 8087   # servidor de persistência local
-```
+- Acesso atual por IP direto na rede Tailscale: `http://100.74.176.72:8086/` (app) e `:8087` (API)
+- Conflito conhecido de porta 443 entre dois Caddys no servidor (nativo vs. Docker) — o container que serve este app precisa vencer o bind da 443 para o HTTPS público funcionar
+- Workflows do n8n: `ute-pe3-workflow.json` (principal) e `ute-pe3-ai-workflow.json` (revisão IA)
